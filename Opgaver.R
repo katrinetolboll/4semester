@@ -1,7 +1,7 @@
 install.packages(c("coda","mvtnorm","devtools"))
 library(devtools)
 devtools::install_github("rmcelreath/rethinking")
-
+library(rethinking)
 
 
                                             ##CHAPTER 1-2##
@@ -21,6 +21,7 @@ p_grid = seq(from=0,to=1, length.out = 100)
 prior= rep(1,100)
 prior=ifelse(p_grid<0.5,01)
 
+
 #compute likelihood at each value in grid
 likelihood = dbinom(5,size=7, prob=p_grid)
 
@@ -29,6 +30,7 @@ unstd.posterior = likelihood *prior
 
 #standardize the posterir, so it sums to 1
 posterior=(unstd.posterior / sum(unstd.posterior))
+
 
 #pretty plots
 plot(p_grid, posterior, type="b", xlab="probability of water", ylab="poterior probability")
@@ -288,3 +290,260 @@ boys.born.after.girls = birth2[birth1 == 0]
 posterior.predictive.distribution = rbinom(1e4, size = length(boys.born.after.girls), prob = samples)
 dens(posterior.predictive.distribution)
 abline(v = sum(boys.born.after.girls))
+
+                    #Chapter 4
+
+pos = replicate(1000, sum(runif(16,-1,1)))
+plot(density(pos))
+
+prod(1+runif(12,0,0.1))
+
+growth=replicate(10000,prod(1+runif(12,0,0.1)))
+dens(growth,norm.comp=T)
+
+big=replicate(10000,prod(1+runif(12,0,0.5)))
+small=replicate(10000,prod(1+runif(12,0,0.01)))
+
+dens(small,norm.comp=T)
+
+#Howel example
+library(rethinking)
+data(Howell1)
+d=Howell1
+
+d2 = d[d$age >=18,]
+dens(d2$height)
+
+#plotting priors
+curve(dnorm(x,178,20),from=100,to=250)
+curve(dunif(x,0,50),from=-10,to=60)
+
+sample_mu=rnorm(1e4,178,20)
+sample_sigma=runif(1e4,0,50)
+prior_h=rnorm(1e4,sample_mu,sample_sigma)
+dens(prior_h)
+
+#compute posterior #idk
+mu.list = seq(from=140, to=160, length.out = 200)
+sigma_list = seq(from=4, to=9, length.out = 200)
+post=expand.grid(mu=mu.list,sigma=sigma_list)
+post$LL=sapply(1:nrow(post),function(i) sum(dnorm(
+  d2$height,
+  mean=post$mu[i],
+  sd=post$sigma[i],
+  log= T)))
+post$prod =post$LL + dnorm(post$mu,178,20,T)+dunif(post$sigma,0,50,T)
+post$prob =exp(post$prod-max(post$prod))
+
+contour_xyz(post$mu,post$sigma,post$prob)
+image_xyz(post$mu,post$sigma,post$prob)
+
+#sampleling from the posterior
+sample.row=sample(1:nrow(post),size=1e4,replace=T,prob=post$prob)
+sample.mu=post$mu[sample.row]
+sample.sigma=post$sigma[sample.row]
+plot(sample.mu,sample.sigma,pch=16,col=col.alpha(rangi2,0.1))
+
+dens(sample.mu)
+dens(sample.sigma)
+HPDI(sample.mu)
+HPDI(sample.sigma)
+
+#Fitting models with map
+library(rethinking)
+data("Howell1")
+d=Howell1
+d2=d[d$age>=18,]
+flist = alist(
+  height~dnorm(mu,sigma),
+  mu~dnorm(178,20),
+  sigma~dunif(0,50)
+)
+m4.1=map(flist,data=d2)
+precis(m4.1)
+
+#An easier way
+m4.2=map(
+  alist(
+    height~dnorm(mu,sigma),
+    mu~dnorm(178,0.1),
+    sigma~dunif(0,50)
+  ),
+  data=d2)
+precis(m4.2)
+
+#adding a predictor
+plot(d2$height~d2$weight)
+
+
+library(rethinking)
+data("Howell1")
+d=Howell1
+d2=d[d$age>=18,]
+m4.3=map(
+  alist(
+    height~dnorm(mu,sigma),
+    mu<-a+b*weight,
+    a~dnorm(156,100),
+    b~dnorm(0,10),
+    sigma~dunif(0,50)
+  ),
+  data=d2)
+precis(m4.3)
+
+
+#centering
+d2$weight.c = d2$weight-mean(d2$weight)
+m4.3=map(
+  alist(
+    height~dnorm(mu,sigma),
+    mu<-a+b*weight.c,
+    a~dnorm(156,100),
+    b~dnorm(0,10),
+    sigma~dunif(0,50)
+  ),
+  data=d2)
+precis(m4.3,corr=T)
+
+
+#plotting
+plot(height~weight, data=d2)
+abline(a=coef(m4.3)["a"],b=coef(m4.3)["b"])
+
+post=extract.samples(m4.3)
+post[1:5,]     
+
+#add uncertanty
+N=10
+dN=d2[1:N,]
+mN=map(
+  alist(
+    height~dnorm(mu,sigma),
+    mu<-a+b*weight,
+    a~dnorm(178,100),
+    b~dnorm(0,10),
+    sigma~dunif(0,50)
+  ),
+  data=dN)
+
+post=extract.samples(mN,n=20)
+plot(dN$weight,dN$height,
+     xlim=range(d2$weight),ylim=range(d2$height),
+     col=rangi2,xlab="weight",ylab="height")
+mtext(concat("N=",N))
+
+for (i in 1:20)
+  abline(a=post$a[1],b=post$b[i],col=col.alpha("black",0.3))
+
+mu=link(m4.3)
+str(mu)
+
+weight.seq=seq(from=25, to=70,by=1)
+mu<-link(m4.3,data=data.frame(weight=weight.seq))
+
+                #Exercises for chapter 4
+#4E1
+nr. 1
+
+#4E2
+2
+
+#4E3
+not gonna happen see page 78
+
+#4E4
+u=a+bx 
+
+#4E5
+3
+
+#4M1
+trials <- 1e3
+mu.prior.samples <- rnorm(n = trials, mean = 0, sd = 10)
+sigma.prior.samples <- runif(n = trials, min = 0, max = 10)
+simulated.heights.from.prior <- rnorm(n = trials, mean = mu.prior.samples, sd = sigma.prior.samples)
+
+#4M2
+4m2=map(
+  alist(
+    height~dnorm(mu,sigma),
+    mu~dnorm(0,10),
+    sigma~dunif(0,10)
+  ),
+
+#4E3
+For let
+
+#4M4
+height~normal(mu,sigma)
+mu=height+year*x
+a~normal(150,50)
+b~normal(0,3)
+sigma~uniform(0,20)
+
+#4M5
+My intercept for mean should be 120cm
+
+#4M6
+from varience i can calculate my sd and then ajust my sigma
+
+#4H1
+# load data
+data(Howell1)
+d <- Howell1
+#Centering in order to aviod strong correlation
+d$weight.centered <- (d$weight - mean(d$weight)) / sd(d$weight)
+
+# build model
+model <- map(
+  alist(
+    height ~ dnorm(mean = mu, sd = sigma),
+    mu <- alpha + beta*weight.centered,
+    alpha ~ dnorm(mean = 0, sd = 10),
+    beta ~ dnorm(mean = 0, sd = 10),
+    sigma ~ dunif(min = 0, max = 70)
+  ),
+  data = d
+)
+
+# simulate heights from model
+individual.weights <- c(46.95, 43.72, 64.78, 32.59, 54.63)
+individual.weights.centered <- (individual.weights - mean(d$weight)) / sd(d$weight)
+simulated.heights <- sim(model, data = list(weight.centered = individual.weights.centered))
+
+# summarize results
+simulated.heights.PI <- apply(X = simulated.heights, MARGIN = 2, FUN = PI, prob = .89)
+
+#intervals
+simulated.heights.PI
+
+posterior.samples <- extract.samples(model)
+simulated.heights.first.individual <- rnorm(n = trials, mean = posterior.samples$alpha + posterior.samples$beta*individual.weights.centered[1], sd = posterior.samples$sigma)
+simulated.heights.first.individual.mean <- mean(simulated.heights.first.individual)
+simulated.heights.first.individual.PI <- PI(samples = simulated.heights.first.individual, prob = .89)
+
+#expected height for 1
+simulated.heights.first.individual.mean
+
+#4H2
+d_under18= d[d$age <18,]
+weight=d_under18$weight
+
+#a)
+model <- map(
+  alist(
+    height ~ dnorm(mean = mu, sd = sigma),
+    mu <- alpha + beta*weight,
+    alpha ~ dnorm(mean = 100, sd = 100),
+    beta ~ dnorm(mean = 0, sd = 10),
+    sigma ~ dunif(min = 0, max = 50)
+  ),
+  data = d_under18
+)
+
+precis(model)
+
+#For every 1kg the child is 2.7 cm higher
+
+#b)
+

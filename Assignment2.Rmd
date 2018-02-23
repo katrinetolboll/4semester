@@ -7,6 +7,10 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+
+library(ggplot2)
+library(ggpubr)
 ```
 
 ## In this assignment we learn how to assess rates from a binomial distribution, using the case of assessing your teachers' knowledge of CogSci
@@ -34,7 +38,6 @@ Questions:
 - N.B. for the rest of the exercise just keep using the grid approximation (we'll move to quadratic approximations in two classes)
 
 ```{r setup, include=FALSE}
-library(ggplot2)
 
 #Define Grid
 dens=20
@@ -53,7 +56,7 @@ unstd.posterior=likelihood * prior_flat
 #More Posterior
 posterior = unstd.posterior/sum(unstd.posterior)
 
-#What is the probability he knows more than chance (0.5)
+#What is the probability he knows more than chance (0.5)?
 sum(posterior_riccardo[p_grid>0.5])
 
 #Riccardo's probability that he knows more than 50% is 50%
@@ -92,10 +95,10 @@ prior_inform = ifelse(p_grid < 0.5, 0,1)
 likelihood_riccardo =dbinom(3, size =6, prob = p_grid)
 
 #Compute posterior
-unstd.posterior=likelihood_riccardo * prior_flat_riccardo
+unstd.posterior_riccardo=likelihood_riccardo * prior_flat_riccardo
 
 #More Posterior
-posterior_riccardo = unstd.posterior/sum(unstd.posterior)
+posterior_riccardo = unstd.posterior_riccardo/sum(unstd.posterior_riccardo)
 
 ------------------------
 
@@ -136,7 +139,7 @@ posterior_Josh = unstd.posterior/sum(unstd.posterior)
 
 -------------------------------------
 #Define Grid
-dens=20
+dens = 20
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
@@ -153,28 +156,35 @@ unstd.posterior=likelihood_mikkel * prior_flat_mikkel
 posterior_mikkel = unstd.posterior/sum(unstd.posterior)
 
 #Produce plots for all teachers
+library(ggplot2)
 
 Data_riccardo=data.frame(grid=p_grid,posterior=posterior_riccardo,prior=prior_flat_riccardo,likelihood=likelihood_riccardo)
-plot_riccardo = ggplot(Data,aes(grid,posterior_riccardo))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_riccardo/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+p1 = ggplot(Data_riccardo,aes(grid,posterior_riccardo))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_riccardo/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
 
 Data_Kristian=data.frame(grid=p_grid,posterior=posterior_Kristian,prior=prior_flat_Kristian,likelihood=likelihood_Kristian)
-Plot_Kristian = ggplot(Data,aes(grid,posterior_Kristian))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_Kristian/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+p2 = ggplot(Data_Kristian,aes(grid,posterior_Kristian))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_Kristian/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
 
 Data_Josh=data.frame(grid=p_grid,posterior=posterior_Josh,prior=prior_flat_Josh,likelihood=likelihood_Josh)
-plot_Josh = ggplot(Data,aes(grid,posterior_Josh))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_Josh/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+p3 = ggplot(Data_Josh,aes(grid,posterior_Josh))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_Josh/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
 
-Data_mikkel=data.frame(grid=p_grid,posterior=posterior,prior=prior_flat_mikkel,likelihood_mikkel=likelihood)
-ggplot(Data,aes(grid,posterior_mikkel))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_mikkel/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+Data_mikkel=data.frame(grid=p_grid,posterior=posterior_mikkel,prior=prior_flat_mikkel,likelihood=likelihood_mikkel)
+p4=ggplot(Data_mikkel,aes(grid,posterior_mikkel))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_mikkel/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
 
-#Flere plot på en gang
+#Plots for all teachers
 
-library(ggplot2)
-multiplot(plot_riccardo,Plot_Kristian,plot_Josh, cols=2)
+ggarrange(p1, p2, p3,p4 + rremove("x.text"), 
+          labels = c("Riccardo", "Kristian", "Josh","Mikkel"),
+          ncol = 2, nrow = 2)
 
 
 #Who is the best?
+#By eyeballing plots it shows that Kristian is the best, however he only answered 2 his data isnt as representive as the others. Josh should therefor be considered the best. 
 
-#comment on mikkel and riccardo -> kig på plots og snak lidt
+
+#comment on mikkel and riccardo
+#Due to more datapoints Mikkel's curve is more narrow indicating the increased presicion. Riccardos curve is broader inicating a bigger probability for answering above or below chance
 
 ```
 
@@ -186,18 +196,327 @@ multiplot(plot_riccardo,Plot_Kristian,plot_Josh, cols=2)
 ```{r}
 
 
-prior = rnorm(n= 1000, mean = 0.8, st = 0.2)
+
+#Define Grid
+dens=20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#Define Prior
+prior = rnorm(20,0.8,0.2)
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+prior_flat_mikkel = rep(1,dens) #Flat
+
+
+#Compute likelihood
+likelihood_riccardo =dbinom(3, size =6, prob = p_grid)
+
+#Compute posterior
+unstd.posterior_riccardo=likelihood_riccardo * prior
+
+#More Posterior
+posterior_riccardo = unstd.posterior_riccardo/sum(unstd.posterior_riccardo)
+
+------------------------
+
+#Define Grid
+dens=20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#Define Prior
+prior = rnorm(20,0.8,0.2)
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+#Compute likelihood
+likelihood_Kristian =dbinom(2, size =2, prob = p_grid)
+
+#Compute posterior
+unstd.posterior=likelihood_Kristian * prior
+
+#More Posterior
+posterior_Kristian = unstd.posterior/sum(unstd.posterior)
+
+-------------------------------
+#Define Grid
+dens=20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#prior
+prior = rnorm(20,0.8,0.2)
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+#Compute likelihood
+likelihood_Josh =dbinom(160, size =198, prob = p_grid)
+
+#Compute posterior
+unstd.posterior=likelihood_Josh * prior
+
+#More Posterior
+posterior_Josh = unstd.posterior/sum(unstd.posterior)
+
+-------------------------------------
+#Define Grid
+dens = 20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#Define Prior
+prior = rnorm(20,0.8,0.2)
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+
+#Compute likelihood
+likelihood_mikkel =dbinom(66, size =132, prob = p_grid)
+
+#Compute posterior
+unstd.posterior=likelihood_mikkel * prior
+
+#More Posterior
+posterior_mikkel = unstd.posterior/sum(unstd.posterior)
+
+#Produce plots for all teachers
+library(ggplot2)
+
+Data_riccardo_p=data.frame(grid=p_grid,posterior=posterior_riccardo,prior=prior,likelihood=likelihood_riccardo)
+p1_p = ggplot(Data_riccardo_p,aes(grid,posterior_riccardo))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+Data_Kristian_p=data.frame(grid=p_grid,posterior=posterior_Kristian,prior=prior,likelihood=likelihood_Kristian)
+p2_p = ggplot(Data_Kristian_p,aes(grid,posterior_Kristian))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+Data_Josh_p=data.frame(grid=p_grid,posterior=posterior_Josh,prior=prior,likelihood=likelihood_Josh)
+p3_p = ggplot(Data_Josh_p,aes(grid,posterior_Josh))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+Data_mikkel_p=data.frame(grid=p_grid,posterior=posterior_mikkel,prior=prior,likelihood=likelihood_mikkel)
+p4_p=ggplot(Data_mikkel_p,aes(grid,posterior_mikkel))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+#Plots for all teachers
+
+ggarrange(p1_p, p2_p, p3_p,p4_p + rremove("x.text"), 
+          labels = c("Riccardo", "Kristian", "Josh","Mikkel"),
+          ncol = 2, nrow = 2)
+
+#The plots show how Riccardo's and Kristian's plot differ since they are no longer smooth. This might be due to the lack of test results or datapoints. As we see Josh's and Mikkel's plots are way smoother. 
+
+
+
 ```
 
 
 4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why?
+```{r}
+#Multiply by 100 
+
+#With normal prior
+#Define Grid
+dens=20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#Define Prior
+prior = rnorm(20,0.8,0.2)
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+prior_flat_mikkel = rep(1,dens) #Flat
+
+
+#Compute likelihood
+likelihood_riccardo =dbinom(300, size =600, prob = p_grid)
+
+#Compute posterior
+unstd.posterior_riccardo=likelihood_riccardo * prior
+
+#More Posterior
+posterior_riccardo = unstd.posterior_riccardo/sum(unstd.posterior_riccardo)
+
+------------------------
+
+#Define Grid
+dens=20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#Define Prior
+prior = rnorm(20,0.8,0.2)
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+#Compute likelihood
+likelihood_Kristian =dbinom(200, size =200, prob = p_grid)
+
+#Compute posterior
+unstd.posterior=likelihood_Kristian * prior
+
+#More Posterior
+posterior_Kristian = unstd.posterior/sum(unstd.posterior)
+
+-------------------------------
+#Define Grid
+dens=20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#prior
+prior = rnorm(20,0.8,0.2)
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+#Compute likelihood
+likelihood_Josh =dbinom(16000, size =19800, prob = p_grid)
+
+#Compute posterior
+unstd.posterior=likelihood_Josh * prior
+
+#More Posterior
+posterior_Josh = unstd.posterior/sum(unstd.posterior)
+
+-------------------------------------
+#Define Grid
+dens = 20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#Define Prior
+prior = rnorm(20,0.8,0.2)
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+
+#Compute likelihood
+likelihood_mikkel =dbinom(6600, size =13200, prob = p_grid)
+
+#Compute posterior
+unstd.posterior=likelihood_mikkel * prior
+
+#More Posterior
+posterior_mikkel = unstd.posterior/sum(unstd.posterior)
+
+#Produce plots for all teachers
+library(ggplot2)
+
+Data_riccardo_p=data.frame(grid=p_grid,posterior=posterior_riccardo,prior=prior,likelihood=likelihood_riccardo)
+p1_p = ggplot(Data_riccardo_p,aes(grid,posterior_riccardo))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+Data_Kristian_p=data.frame(grid=p_grid,posterior=posterior_Kristian,prior=prior,likelihood=likelihood_Kristian)
+p2_p = ggplot(Data_Kristian_p,aes(grid,posterior_Kristian))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+Data_Josh_p=data.frame(grid=p_grid,posterior=posterior_Josh,prior=prior,likelihood=likelihood_Josh)
+p3_p = ggplot(Data_Josh_p,aes(grid,posterior_Josh))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+Data_mikkel_p=data.frame(grid=p_grid,posterior=posterior_mikkel,prior=prior,likelihood=likelihood_mikkel)
+p4_p=ggplot(Data_mikkel_p,aes(grid,posterior_mikkel))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+#Plots for all teachers
+
+ggarrange(p1_p, p2_p, p3_p,p4_p + rremove("x.text"), 
+          labels = c("Riccardo", "Kristian", "Josh","Mikkel"),
+          ncol = 2, nrow = 2)
+
+
+#With Flat prior
+
+#Define Grid
+dens=20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#Define Prior
+prior_flat_riccardo = rep(1,dens) #Flat
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+#Compute likelihood
+likelihood_riccardo =dbinom(300, size =600, prob = p_grid)
+
+#Compute posterior
+unstd.posterior_riccardo=likelihood_riccardo * prior_flat_riccardo
+
+#More Posterior
+posterior_riccardo = unstd.posterior_riccardo/sum(unstd.posterior_riccardo)
+
+------------------------
+
+#Define Grid
+dens=20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#Define Prior
+prior_flat_Kristian = rep(1,dens) #Flat
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+#Compute likelihood
+likelihood_Kristian =dbinom(200, size =200, prob = p_grid)
+
+#Compute posterior
+unstd.posterior=likelihood_Kristian * prior_flat_Kristian
+
+#More Posterior
+posterior_Kristian = unstd.posterior/sum(unstd.posterior)
+
+-------------------------------
+#Define Grid
+dens=20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#Define Prior
+prior_flat_Josh = rep(1,dens) #Flat
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+#Compute likelihood
+likelihood_Josh =dbinom(16000, size =19800, prob = p_grid)
+
+#Compute posterior
+unstd.posterior=likelihood_Josh * prior_flat_Josh
+
+#More Posterior
+posterior_Josh = unstd.posterior/sum(unstd.posterior)
+
+-------------------------------------
+#Define Grid
+dens = 20
+p_grid = seq(from=0, to = 1, length.out = dens)
+
+#Define Prior
+prior_flat_mikkel = rep(1,dens) #Flat
+prior_inform = ifelse(p_grid < 0.5, 0,1)
+
+#Compute likelihood
+likelihood_mikkel =dbinom(6600, size =13200, prob = p_grid)
+
+#Compute posterior
+unstd.posterior=likelihood_mikkel * prior_flat_mikkel
+
+#More Posterior
+posterior_mikkel = unstd.posterior/sum(unstd.posterior)
+
+#Produce plots for all teachers
+library(ggplot2)
+
+Data_riccardo=data.frame(grid=p_grid,posterior=posterior_riccardo,prior=prior_flat_riccardo,likelihood=likelihood_riccardo)
+p1 = ggplot(Data_riccardo,aes(grid,posterior_riccardo))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_riccardo/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+
+Data_Kristian=data.frame(grid=p_grid,posterior=posterior_Kristian,prior=prior_flat_Kristian,likelihood=likelihood_Kristian)
+p2 = ggplot(Data_Kristian,aes(grid,posterior_Kristian))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_Kristian/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+
+Data_Josh=data.frame(grid=p_grid,posterior=posterior_Josh,prior=prior_flat_Josh,likelihood=likelihood_Josh)
+p3 = ggplot(Data_Josh,aes(grid,posterior_Josh))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_Josh/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+Data_mikkel=data.frame(grid=p_grid,posterior=posterior_mikkel,prior=prior_flat_mikkel,likelihood=likelihood_mikkel)
+p4=ggplot(Data_mikkel,aes(grid,posterior_mikkel))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat_mikkel/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
+
+#Plots for all teachers
+
+ggarrange(p1, p2, p3,p4 + rremove("x.text"), 
+          labels = c("Riccardo", "Kristian", "Josh","Mikkel"),
+          ncol = 2, nrow = 2)
+
+#They are now almost similar now, more data generate a stronger support for the probability of correct
+
+```
+
 
 5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief?
+```{r}
+#When being speptic we would assume that it is not possible to get every single question correct. It will only be interresting to look at the probability below the 95%. 
+```
+
 
 6. Optional question: Can you estimate the difference between Riccardo's estimated knowledge and that of each of the other teachers? Would you deem it credible (that is, would you believe that it is actually different)?
 
 7. Bonus knowledge: all the stuff we have done can be implemented in a lme4-like fashion using the brms package. Here is an example.
 ```{r}
+install.packages("brms")
 library(brms)
 d <- data.frame(
   Correct=c(3,2,160,66),
@@ -219,4 +538,4 @@ If you dare, try to tweak the data and model to test two hypotheses:
 
 
 
-prior = rnorm(n= 1000, mean = 0.8, st = 0.2)
+
