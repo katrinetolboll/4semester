@@ -40,27 +40,26 @@ Questions:
 ```{r setup, include=FALSE}
 
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
-#Define Prior
-prior_flat = rep(1,dens) #Flat
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+#Define  flat Prior
+prior_flat = rep(1,dens)
 
 #Compute likelihood
 likelihood =dbinom(3, size =6, prob = p_grid)
 
 #Compute posterior
 unstd.posterior=likelihood * prior_flat
-
-#More Posterior
 posterior = unstd.posterior/sum(unstd.posterior)
 
 #What is the probability he knows more than chance (0.5)?
-sum(posterior_riccardo[p_grid>0.5])
+sum(posterior[p_grid<0.5])
 
-#Riccardo's probability that he knows more than 50% is 50%
+#Riccardo's probability that he knows more than 50% is 50% (Might differ due to samples)
 
+
+#Plot
 Data=data.frame(grid=p_grid,posterior=posterior,prior=prior_flat,likelihood=likelihood)
 ggplot(Data,aes(grid,posterior))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior_flat/dens),color='red')+  xlab("probability of correct")+ ylab("posterior probability")
 
@@ -84,75 +83,63 @@ precis(globe.qa)
 ```{r}
 
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior_flat_riccardo = rep(1,dens) #Flat
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior_flat_riccardo = rep(1,dens)
 
 #Compute likelihood
 likelihood_riccardo =dbinom(3, size =6, prob = p_grid)
 
 #Compute posterior
 unstd.posterior_riccardo=likelihood_riccardo * prior_flat_riccardo
-
-#More Posterior
 posterior_riccardo = unstd.posterior_riccardo/sum(unstd.posterior_riccardo)
 
 ------------------------
 
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior_flat_Kristian = rep(1,dens) #Flat
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior_flat_Kristian = rep(1,dens) 
 
 #Compute likelihood
 likelihood_Kristian =dbinom(2, size =2, prob = p_grid)
 
 #Compute posterior
 unstd.posterior=likelihood_Kristian * prior_flat_Kristian
-
-#More Posterior
 posterior_Kristian = unstd.posterior/sum(unstd.posterior)
 
 -------------------------------
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior_flat_Josh = rep(1,dens) #Flat
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior_flat_Josh = rep(1,dens)
 
 #Compute likelihood
 likelihood_Josh =dbinom(160, size =198, prob = p_grid)
 
 #Compute posterior
 unstd.posterior=likelihood_Josh * prior_flat_Josh
-
-#More Posterior
 posterior_Josh = unstd.posterior/sum(unstd.posterior)
 
 -------------------------------------
 #Define Grid
-dens = 20
+dens = 1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior_flat_mikkel = rep(1,dens) #Flat
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior_flat_mikkel = rep(1,dens)
 
 #Compute likelihood
 likelihood_mikkel =dbinom(66, size =132, prob = p_grid)
 
 #Compute posterior
 unstd.posterior=likelihood_mikkel * prior_flat_mikkel
-
-#More Posterior
 posterior_mikkel = unstd.posterior/sum(unstd.posterior)
 
 #Produce plots for all teachers
@@ -180,11 +167,44 @@ ggarrange(p1, p2, p3,p4 + rremove("x.text"),
 
 
 #Who is the best?
-#By eyeballing plots it shows that Kristian is the best, however he only answered 2 his data isnt as representive as the others. Josh should therefor be considered the best. 
 
+#Riccardo
+p_grid[which.max(posterior_riccardo)]
 
-#comment on mikkel and riccardo
-#Due to more datapoints Mikkel's curve is more narrow indicating the increased presicion. Riccardos curve is broader inicating a bigger probability for answering above or below chance
+RiccardoSamples = sample(p_grid , prob=posterior_riccardo , size=1e5 , replace=TRUE )
+dens(RiccardoSamples)
+HPDI(RiccardoSamples, prob = 0.5)
+#the highest posterior density interval for Riccardo is from 0.37 to 0.61  cog sci knowledge (50 % interval)
+
+#Kristian
+p_grid[which.max(posterior_Kristian)]
+
+KristianSamples = sample(p_grid , prob=posterior_Kristian , size=1e5 , replace=TRUE )
+dens(KristianSamples)
+HPDI(KristianSamples, prob = 0.5)
+#the highest posterior density interval for Krisitan is from 0.79 to 1  cog sci knowledge (50 % interval)
+
+#Josh
+p_grid[which.max(posterior_Josh)]
+
+JoshSamples = sample(p_grid , prob=posterior_Josh, size=1e5 , replace=TRUE )
+dens(JoshSamples)
+HPDI(JoshSamples, prob = 0.5)
+#the highest posterior density interval for Josh is from 0.78 to 0.82  cog sci knowledge (50 % interval)
+
+#Mikkel
+p_grid[which.max(posterior_mikkel)
+
+MikkelSamples = sample(p_grid, prob=posterior_mikkel , size=1e5 , replace=TRUE )
+dens(MikkelSamples)
+HPDI(MikkelSamples, prob = 0.5)
+#the highest posterior density interval for Mikkel is from 0.47 to 0.52  cog sci knowledge (50 % interval)
+
+#Kristian is "the best" since his MAP is 1
+
+#Comment on mikkel and riccardo
+#Riccardo and Mikkel both MAP values of 50 %, however there is much more uncertainty regarding Riccardo's estimate. The 50% most likely values for Riccardo's cog sci knowledge (HPDI) is between 0.36 and 0.60. For Mikkel, these values lie between 0.47 and 0.52.
+
 
 ```
 
@@ -194,19 +214,12 @@ ggarrange(p1, p2, p3,p4 + rremove("x.text"),
 3a. Produce plots of the prior and posterior for each teacher.
 
 ```{r}
-
-
-
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior = rnorm(20,0.8,0.2)
-prior_inform = ifelse(p_grid < 0.5, 0,1)
-
-prior_flat_mikkel = rep(1,dens) #Flat
-
+prior = dnorm(p_grid,0.8,0.2)
 
 #Compute likelihood
 likelihood_riccardo =dbinom(3, size =6, prob = p_grid)
@@ -220,12 +233,11 @@ posterior_riccardo = unstd.posterior_riccardo/sum(unstd.posterior_riccardo)
 ------------------------
 
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior = rnorm(20,0.8,0.2)
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior = dnorm(p_grid,0.8,0.2)
 
 #Compute likelihood
 likelihood_Kristian =dbinom(2, size =2, prob = p_grid)
@@ -238,12 +250,11 @@ posterior_Kristian = unstd.posterior/sum(unstd.posterior)
 
 -------------------------------
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #prior
-prior = rnorm(20,0.8,0.2)
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior = dnorm(p_grid,0.8,0.2)
 
 #Compute likelihood
 likelihood_Josh =dbinom(160, size =198, prob = p_grid)
@@ -256,13 +267,11 @@ posterior_Josh = unstd.posterior/sum(unstd.posterior)
 
 -------------------------------------
 #Define Grid
-dens = 20
+dens = 1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior = rnorm(20,0.8,0.2)
-prior_inform = ifelse(p_grid < 0.5, 0,1)
-
+prior = dnorm(p_grid,0.8,0.2)
 
 #Compute likelihood
 likelihood_mikkel =dbinom(66, size =132, prob = p_grid)
@@ -294,8 +303,41 @@ ggarrange(p1_p, p2_p, p3_p,p4_p + rremove("x.text"),
           labels = c("Riccardo", "Kristian", "Josh","Mikkel"),
           ncol = 2, nrow = 2)
 
-#The plots show how Riccardo's and Kristian's plot differ since they are no longer smooth. This might be due to the lack of test results or datapoints. As we see Josh's and Mikkel's plots are way smoother. 
+#Who is the best?
 
+#Riccardo
+p_grid[which.max(posterior_riccardo)]
+
+RiccardoSamples = sample(p_grid , prob=posterior_riccardo , size=1e5 , replace=TRUE )
+dens(RiccardoSamples)
+HPDI(RiccardoSamples, prob = 0.5)
+#the highest posterior density interval for Riccardo is from 0.55 to 0.72  cog sci knowledge (50 % interval)
+
+#Kristian
+p_grid[which.max(posterior_Kristian)]
+
+KristianSamples = sample(p_grid , prob=posterior_Kristian , size=1e5 , replace=TRUE )
+dens(KristianSamples)
+HPDI(KristianSamples, prob = 0.5)
+#the highest posterior density interval for Krisitan is from 0.78 to 96  cog sci knowledge (50 % interval)
+
+#Josh
+p_grid[which.max(posterior_Josh)]
+
+JoshSamples = sample(p_grid , prob=posterior_Josh, size=1e5 , replace=TRUE )
+dens(JoshSamples)
+HPDI(JoshSamples, prob = 0.5)
+#the highest posterior density interval for Josh is from 0.78 to 0.82  cog sci knowledge (50 % interval)
+
+#Mikkel
+p_grid[which.max(posterior_mikkel)
+
+MikkelSamples = sample(p_grid, prob=posterior_mikkel , size=1e5 , replace=TRUE )
+dens(MikkelSamples)
+HPDI(MikkelSamples, prob = 0.5)
+#the highest posterior density interval for Mikkel is from 0.47 to 0.54  cog sci knowledge (50 % interval)
+
+#With the normal prior, the HPDI changes, as vel as the MAP values. The normal prior is better than the uniform
 
 
 ```
@@ -304,18 +346,13 @@ ggarrange(p1_p, p2_p, p3_p,p4_p + rremove("x.text"),
 4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why?
 ```{r}
 #Multiply by 100 
-
-#With normal prior
+#Normal Prior
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior = rnorm(20,0.8,0.2)
-prior_inform = ifelse(p_grid < 0.5, 0,1)
-
-prior_flat_mikkel = rep(1,dens) #Flat
-
+prior = dnorm(p_grid,0.8,0.2)
 
 #Compute likelihood
 likelihood_riccardo =dbinom(300, size =600, prob = p_grid)
@@ -329,12 +366,11 @@ posterior_riccardo = unstd.posterior_riccardo/sum(unstd.posterior_riccardo)
 ------------------------
 
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior = rnorm(20,0.8,0.2)
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior = dnorm(p_grid,0.8,0.2)
 
 #Compute likelihood
 likelihood_Kristian =dbinom(200, size =200, prob = p_grid)
@@ -347,12 +383,11 @@ posterior_Kristian = unstd.posterior/sum(unstd.posterior)
 
 -------------------------------
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #prior
-prior = rnorm(20,0.8,0.2)
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior = dnorm(p_grid,0.8,0.2)
 
 #Compute likelihood
 likelihood_Josh =dbinom(16000, size =19800, prob = p_grid)
@@ -365,13 +400,11 @@ posterior_Josh = unstd.posterior/sum(unstd.posterior)
 
 -------------------------------------
 #Define Grid
-dens = 20
+dens = 1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior = rnorm(20,0.8,0.2)
-prior_inform = ifelse(p_grid < 0.5, 0,1)
-
+prior = dnorm(p_grid,0.8,0.2)
 
 #Compute likelihood
 likelihood_mikkel =dbinom(6600, size =13200, prob = p_grid)
@@ -403,79 +436,99 @@ ggarrange(p1_p, p2_p, p3_p,p4_p + rremove("x.text"),
           labels = c("Riccardo", "Kristian", "Josh","Mikkel"),
           ncol = 2, nrow = 2)
 
+#Who is the best?
 
-#With Flat prior
+#Riccardo
+p_grid[which.max(posterior_riccardo)]
 
+RiccardoSamples = sample(p_grid , prob=posterior_riccardo , size=1e5 , replace=TRUE )
+dens(RiccardoSamples)
+HPDI(RiccardoSamples, prob = 0.5)
+#the highest posterior density interval for Riccardo is from 0.49 to 0.51  cog sci knowledge (50 % interval)
+
+#Kristian
+p_grid[which.max(posterior_Kristian)]
+
+KristianSamples = sample(p_grid , prob=posterior_Kristian , size=1e5 , replace=TRUE )
+dens(KristianSamples)
+HPDI(KristianSamples, prob = 0.5)
+#the highest posterior density interval for Krisitan is from 0.997 to 1  cog sci knowledge (50 % interval)
+
+#Josh
+p_grid[which.max(posterior_Josh)]
+
+JoshSamples = sample(p_grid , prob=posterior_Josh, size=1e5 , replace=TRUE )
+dens(JoshSamples)
+HPDI(JoshSamples, prob = 0.5)
+#the highest posterior density interval for Josh is from 0.805 to 0.808  cog sci knowledge (50 % interval)
+
+#Mikkel
+p_grid[which.max(posterior_mikkel)
+
+MikkelSamples = sample(p_grid, prob=posterior_mikkel , size=1e5 , replace=TRUE )
+dens(MikkelSamples)
+HPDI(MikkelSamples, prob = 0.5)
+#the highest posterior density interval for Mikkel is from 0.48 to 0.54  cog sci knowledge (50 % interval)
+
+#With Uniform prior
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior_flat_riccardo = rep(1,dens) #Flat
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior_flat_riccardo = rep(1,dens)
 
 #Compute likelihood
 likelihood_riccardo =dbinom(300, size =600, prob = p_grid)
 
 #Compute posterior
 unstd.posterior_riccardo=likelihood_riccardo * prior_flat_riccardo
-
-#More Posterior
 posterior_riccardo = unstd.posterior_riccardo/sum(unstd.posterior_riccardo)
 
 ------------------------
 
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior_flat_Kristian = rep(1,dens) #Flat
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior_flat_Kristian = rep(1,dens) 
 
 #Compute likelihood
 likelihood_Kristian =dbinom(200, size =200, prob = p_grid)
 
 #Compute posterior
 unstd.posterior=likelihood_Kristian * prior_flat_Kristian
-
-#More Posterior
 posterior_Kristian = unstd.posterior/sum(unstd.posterior)
 
 -------------------------------
 #Define Grid
-dens=20
+dens=1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior_flat_Josh = rep(1,dens) #Flat
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior_flat_Josh = rep(1,dens)
 
 #Compute likelihood
 likelihood_Josh =dbinom(16000, size =19800, prob = p_grid)
 
 #Compute posterior
 unstd.posterior=likelihood_Josh * prior_flat_Josh
-
-#More Posterior
 posterior_Josh = unstd.posterior/sum(unstd.posterior)
 
 -------------------------------------
 #Define Grid
-dens = 20
+dens = 1000
 p_grid = seq(from=0, to = 1, length.out = dens)
 
 #Define Prior
-prior_flat_mikkel = rep(1,dens) #Flat
-prior_inform = ifelse(p_grid < 0.5, 0,1)
+prior_flat_mikkel = rep(1,dens)
 
 #Compute likelihood
 likelihood_mikkel =dbinom(6600, size =13200, prob = p_grid)
 
 #Compute posterior
 unstd.posterior=likelihood_mikkel * prior_flat_mikkel
-
-#More Posterior
 posterior_mikkel = unstd.posterior/sum(unstd.posterior)
 
 #Produce plots for all teachers
@@ -501,7 +554,43 @@ ggarrange(p1, p2, p3,p4 + rremove("x.text"),
           labels = c("Riccardo", "Kristian", "Josh","Mikkel"),
           ncol = 2, nrow = 2)
 
-#They are now almost similar now, more data generate a stronger support for the probability of correct
+
+#Who is the best?
+
+#Riccardo
+p_grid[which.max(posterior_riccardo)]
+
+RiccardoSamples = sample(p_grid , prob=posterior_riccardo , size=1e5 , replace=TRUE )
+dens(RiccardoSamples)
+HPDI(RiccardoSamples, prob = 0.5)
+#the highest posterior density interval for Riccardo is from 0.49 to 0.51  cog sci knowledge (50 % interval)
+
+#Kristian
+p_grid[which.max(posterior_Kristian)]
+
+KristianSamples = sample(p_grid , prob=posterior_Kristian , size=1e5 , replace=TRUE )
+dens(KristianSamples)
+HPDI(KristianSamples, prob = 0.5)
+#the highest posterior density interval for Krisitan is from 0.997 to 1  cog sci knowledge (50 % interval)
+
+#Josh
+p_grid[which.max(posterior_Josh)]
+
+JoshSamples = sample(p_grid , prob=posterior_Josh, size=1e5 , replace=TRUE )
+dens(JoshSamples)
+HPDI(JoshSamples, prob = 0.5)
+#the highest posterior density interval for Josh is from 0.805 to 0.808  cog sci knowledge (50 % interval)
+
+#Mikkel
+p_grid[which.max(posterior_mikkel)
+
+MikkelSamples = sample(p_grid, prob=posterior_mikkel , size=1e5 , replace=TRUE )
+dens(MikkelSamples)
+HPDI(MikkelSamples, prob = 0.5)
+#the highest posterior density interval for Mikkel is from 0.48 to 0.54  cog sci knowledge (50 % interval)
+
+
+#They are now the same, more data generate a stronger support for the probability of correct. The uniform and normal prior are both equally good
 
 ```
 
