@@ -1,0 +1,270 @@
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## PREPROCESSING OF DATA
+```{r cars}
+p_load(lme4, lmerTest, ggplot2, jpeg, grid, caret)
+
+setwd("~/Desktop/OneDrive/Cognitive Science/4 semester/Eyetracking/2018 - Eye tracking/PupilsLogs")
+#load files, videos
+logfile1 = read.csv("logfile_1_2_f.csv")
+logfile2 = read.csv("logfile_2_1_f.csv")
+logfile3 = read.csv("logfile_3_2_f.csv")
+logfile4 = read.csv("logfile_4_1_F.csv")
+logfile5 = read.csv("logfile_5_2_m.csv")
+logfile6 = read.csv("logfile_6_1_m.csv")
+
+#load files, data
+setwd("~/Desktop/OneDrive/Cognitive Science/4 semester/Eyetracking/2018 - Eye tracking")
+SacV1 = read.csv("SaccadesV1.csv", sep = ",")
+SamV1 = read.csv("SamplesV1.csv", sep = ",")
+FixV1 = read.csv("FixationsV1.csv", sep = ",")
+
+#rename coloumn from subject to participant ID in logfiles
+names(logfile1)[names(logfile1) == 'subject'] = 'ParticipantID'
+names(logfile2)[names(logfile2) == 'subject'] = 'ParticipantID'
+names(logfile3)[names(logfile3) == 'subject'] = 'ParticipantID'
+names(logfile4)[names(logfile4) == 'subject'] = 'ParticipantID'
+names(logfile5)[names(logfile5) == 'subject'] = 'ParticipantID'
+names(logfile6)[names(logfile6) == 'subject'] = 'ParticipantID'
+
+#rename coloum X to Trial
+names(logfile1)[names(logfile1) == 'X'] = 'Trial'
+names(logfile2)[names(logfile2) == 'X'] = 'Trial'
+names(logfile3)[names(logfile3) == 'X'] = 'Trial'
+names(logfile4)[names(logfile4) == 'X'] = 'Trial'
+names(logfile5)[names(logfile5) == 'X'] = 'Trial'
+names(logfile6)[names(logfile6) == 'X'] = 'Trial'
+
+#merge datasets together
+log_merge = rbind(logfile1, logfile2, logfile3, logfile4, logfile5, logfile6)
+#plus 1 to trial
+log_merge$Trial = log_merge$Trial+1
+
+#merge logfiles into V1's dataset
+FixV1wLog = merge(FixV1, log_merge, all = "TRUE")
+SacV1wLog = merge(SacV1, log_merge, all = "TRUE")
+SamV1wLog = merge(SamV1, log_merge, all = "TRUE")
+
+#adding extra coloum and renaming. here for female/male actor in video
+for (file in 1:nrow(log_merge)){
+  if (grepl("m", log_merge$video[file])){
+    log_merge$ActorGender[file]='male'}
+  if (grepl("f", log_merge$video[file])){
+    log_merge$ActorGender[file]='female'}}
+
+#ostensiveness
+for (file in 1:nrow(log_merge)){
+  if (grepl("+", log_merge$video[file])){
+    log_merge$ostensiveness[file]='1'}
+  if (grepl("-", log_merge$video[file])){
+    log_merge$ostensiveness[file]='0'}}
+
+
+#directed/diverted 
+for (file in 1:nrow(log_merge)){
+  if (grepl("dir", log_merge$video[file])){
+    log_merge$orientation[file]='directed'}
+  if (grepl("div", log_merge$video[file])){
+    log_merge$orientation[file]='diverted'}}
+
+
+#Search order fixations
+
+FixV1$SearchType[FixV1$SearchOrder==1 & FixV1$Trial < 6]="Star" 
+FixV1$SearchType[FixV1$SearchOrder==1 & FixV1$Trial > 5]="Count" 
+
+FixV1$SearchType[FixV1$SearchOrder==2 & FixV1$Trial<6]="Count" 
+FixV1$SearchType[FixV1$SearchOrder==2 & FixV1$Trial>5]="Star" 
+
+#Search order saccades
+SacV1$SearchType[SacV1$SearchOrder ==1 & SacV1$Trial < 6]="Star"
+SacV1$SearchType[SacV1$SearchOrder ==1 & SacV1$Trial > 5]="Count"
+
+SacV1$SearchType[SacV1$SearchOrder ==2 & SacV1$Trial < 6]="Count"
+SacV1$SearchType[SacV1$SearchOrder ==2 & SacV1$Trial > 5]="Star"
+
+# Search order samples
+SamV1$SearchType[SamV1$SearchOrder==1 & SamV1$Trial < 6]="Star" 
+SamV1$SearchType[SamV1$SearchOrder==1 & SamV1$Trial > 5]="Count" 
+
+SamV1$SearchType[SamV1$SearchOrder==2 & SamV1$Trial<6]="Count" 
+SamV1$SearchType[SamV1$SearchOrder==2 & SamV1$Trial>5]="Star" 
+
+#merge logfiles into V1's dataset
+FixV1wLog = merge(FixV1, log_merge, by = "ParticipantID", all = "TRUE")
+SacV1wLog = merge(SacV1, log_merge, by = "ParticipantID", all = "TRUE")
+SamV1wLog = merge(SamV1, log_merge, by = "ParticipantID", all = "TRUE")
+
+```
+
+## VISUAL SEARCH - CROSSVALIDATION
+
+```{r}
+setwd("~/Desktop/OneDrive/Cognitive Science/4 semester/Eyetracking/2018 - Eye tracking") 
+fixations = read.csv("FixationsV2.csv", sep = ",")
+saccades = read.csv("SaccadesV2.csv", sep = ",")
+
+#Making a subset with only the data from the visualsearch tasks. 
+visualsearch = subset(fixations, Task == "VisualSearch")
+visualsearch$ParticipantID = as.numeric(as.factor(as.character(visualsearch$ParticipantID)))
+folds = createFolds(unique(visualsearch$ParticipantID),3)
+
+train_RMSE = NULL
+test_RMSE = NULL
+n = 1
+
+for (fold in folds) {
+  #train is everything but not fold, ! means all but not the following
+  train = subset(visualsearch, ! (ParticipantID %in% fold))
+  #test is every other fold than the fold in train
+  test = subset(visualsearch, (ParticipantID %in% fold))
+  #The model we want to test
+  train_model = lmer(Duration ~ SearchType * Trial + (1 + SearchType + Trial | ParticipantID), data = train, REML = FALSE)
+  #Test the model on train data, seeing how well the model predicts train data
+  train_RMSE[n] = Metrics::rmse(train$Duration, predict(train_model, train, allow.new.levels = TRUE))
+  #Test the model on test data, seeing how well the model predicts test data - which is not a part of the model
+  pred = predict(train_model, test, allow.new.levels = TRUE)
+  test_RMSE[n] = Metrics::rmse(test$Duration, pred)
+  n = n+1
+}
+#Reporting the mean of how well the model predicts. 
+mean(test_RMSE)
+mean(train_RMSE)
+
+#Cross-validating the model with main effects:
+train_RMSE2 = NULL
+test_RMSE2 = NULL
+n = 1
+
+for (fold in folds) {
+  #train2 is everything but not fold, ! means all but not the following
+  train2 = subset(visualsearch, ! (ParticipantID %in% fold))
+  #test2 is every other fold than the fold in train2
+  test2 = subset(visualsearch, (ParticipantID %in% fold))
+  #The model we want to test
+  train_model2 = lmer(Duration ~ SearchType + Trial + (1 + SearchType + Trial | ParticipantID), data = train2, REML = FALSE)
+  #Test the model on train data, seeing how well the model predicts train data
+  train_RMSE2[n] = Metrics::rmse(train2$Duration, predict(train_model2, train2, allow.new.levels = TRUE))
+  #Test the model on test data, seeing how well the model predicts test data - which is not a part of the model
+  pred = predict(train_model2, test2, allow.new.levels = TRUE)
+  test_RMSE2[n] = Metrics::rmse(test2$Duration, pred)
+  n = n+1
+}
+#Reporting the mean of how well the model predicts. 
+mean(test_RMSE2)
+mean(train_RMSE2)
+
+
+#Crossvalidating the simplest model
+train_RMSE3 = NULL
+test_RMSE3 = NULL
+n = 1
+
+for (fold in folds) {
+  #train3 is everything but not fold, ! means all but not the following
+  train3 = subset(visualsearch, ! (ParticipantID %in% fold))
+  #test3 is every other fold than the fold in train2
+  test3 = subset(visualsearch, (ParticipantID %in% fold))
+  #The model we want to test
+  train_model3 = lmer(Duration ~ SearchType + (1 + SearchType | ParticipantID), data = train3, REML = FALSE)
+  #Test the model on train data, seeing how well the model predicts train data
+  train_RMSE3[n] = Metrics::rmse(train3$Duration, predict(train_model3, train3, allow.new.levels = TRUE))
+  #Test the model on test data, seeing how well the model predicts test data - which is not a part of the model
+  pred = predict(train_model3, test3, allow.new.levels = TRUE)
+  test_RMSE3[n] = Metrics::rmse(test3$Duration, pred)
+  n = n+1
+}
+#Reporting the mean of how well the model predicts. 
+mean(test_RMSE3)
+mean(train_RMSE3)
+
+
+#RUNNING THE MODELS
+model1 = glmer(Duration ~ SearchType * Trial + (1 + SearchType * Trial | ParticipantID), data = fixations)
+summary(model1)
+
+model2 = lmer(Duration ~ SearchType + Trial + (1 + SearchType + Trial | ParticipantID), data = fixations)
+summary(model2)
+
+model3 = lmer(Duration ~ SearchType + (1 + Trial | ParticipantID), data = fixations)
+summary(model3)
+
+```
+
+## HEAT MAPS 
+```{r}
+
+# SHEEP
+img <-readJPEG('/Users/jan/Desktop/OneDrive/Cognitive Science/4 semester/Eyetracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng021ws.jpg')
+
+g <- rasterGrob(img, interpolate=TRUE) #to get the picture to show 
+
+#get the colors
+jet.colors = colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#F70000"))
+
+# plot of sheep
+ggplot(subset(fixations, Task=='VisualSearch' & ParticipantID=='6_3_m2' & Trial==6), aes(x = PositionX, y = PositionY)) +
+  xlim(0,1920) + #limiting graph space to a specific amount to match with the picture with a specific resolution. the resolution on the screen used that day when running the experiment. 
+  ylim(0, 1080) + #limiting graph space to a specific amount to match with the picture with a specific resolution. the resolution of the screen used that day when running the experiment. 
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) + 
+stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) +  scale_alpha(range = c(0.1, 0.6))  +
+ scale_fill_gradientn(colours = jet.colors(10), trans= "sqrt")
+# alpha = transparency 
+
+
+# Plot 
+img <-readJPEG('/Users/jan/Desktop/OneDrive/Cognitive Science/4 semester/Eyetracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng090ws.jpg')
+
+g <- rasterGrob(img, interpolate=TRUE) #to get the picture to show 
+
+#get the colors
+jet.colors = colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#F70000"))
+
+# plot 
+ggplot(subset(fixations, Task=='VisualSearch' & ParticipantID=='6_3_m2' & Trial==6), aes(x = PositionX, y = PositionY)) +
+  xlim(0,1920) + #limiting graph space to a specific amount to match with the picture with a specific resolution. the resolution on the screen used that day when running the experiment. 
+  ylim(0, 1080) + #limiting graph space to a specific amount to match with the picture with a specific resolution. the resolution of the screen used that day when running the experiment. 
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) + 
+stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) +  scale_alpha(range = c(0.1, 0.6))  +
+ scale_fill_gradientn(colours = jet.colors(10), trans= "sqrt")
+# alpha = transparency 
+
+
+
+
+```
+
+## SCANPATHS 
+```{r}
+
+# SHEEP
+img3 <-readJPEG('/Users/jan/Desktop/OneDrive/Cognitive Science/4 semester/Eyetracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng021ws.jpg')
+
+g <- rasterGrob(img3, interpolate=TRUE) #to get the picture to show 
+
+ggplot(subset(fixations, Task == 'VisualSearch' & ParticipantID == '1_1_f1' & Trial == 1), aes(x=PositionX, y=PositionY, label=Fixation)) + annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = 5, alpha = 0.5, colour = 'pink')+
+  geom_path(size = 1, alpha = 0.3, colour = 'pink') +
+  geom_text(aes(label = Fixation, size = 5)) 
+
+
+# Plot
+img3 <-readJPEG('/Users/jan/Desktop/OneDrive/Cognitive Science/4 semester/Eyetracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng090ws.jpg')
+
+g <- rasterGrob(img3, interpolate=TRUE) #to get the picture to show 
+x = subset(fixations, Task =='VisualSearch' & ParticipantID=='1_1_f1' & Trial ==1)
+x = x[order(x$Fixation),]
+
+ggplot(x, aes(x=PositionX, y=PositionY, label=Fixation)) + 
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = x$Duration/50, alpha = 0.5, colour = 'pink')+
+  geom_path(size = 1, alpha = 0.3, colour = 'pink') +
+  geom_text(aes(label = Fixation, size = 5)) 
+
+
+```
+
+
