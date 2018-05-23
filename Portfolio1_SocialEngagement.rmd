@@ -1,0 +1,186 @@
+---
+title: "Portfolio1_SocialEngagement"
+author: "Rikke Kjems"
+date: "5/3/2018"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## PREPROCESSING
+```{r}
+library(pacman)
+p_load(lmerTest, lme4, ggplot2, pastecs, Metrics, MuMIn, merTools, groupdata2, stringr, dplyr, cvms)
+install.packages("devtools")
+
+devtools::install_github("LudvigOlsen/groupdata2")
+
+devtools::install_github("LudvigOlsen/cvms")
+
+setwd("~/4semester/eyetracking/PupilsLogs")
+
+#load files, videos
+logfile1 = read.csv("logfile_1_2_f.csv")
+logfile2 = read.csv("logfile_2_1_f.csv")
+logfile3 = read.csv("logfile_3_2_f.csv")
+logfile4 = read.csv("logfile_4_1_F.csv")
+logfile5 = read.csv("logfile_5_2_m.csv")
+logfile6 = read.csv("logfile_6_1_m.csv")
+
+#load files, data
+setwd("~/4semester/eyetracking")
+SacV1 = read.csv("SaccadesV1.csv", sep = ",")
+SamV1 = read.csv("SamplesV1.csv", sep = ",")
+FixV1 = read.csv("FixationsV1.csv", sep = ",")
+
+#rename coloumn from subject to participant ID in logfiles
+names(logfile1)[names(logfile1) == 'subject'] = 'ParticipantID'
+names(logfile2)[names(logfile2) == 'subject'] = 'ParticipantID'
+names(logfile3)[names(logfile3) == 'subject'] = 'ParticipantID'
+names(logfile4)[names(logfile4) == 'subject'] = 'ParticipantID'
+names(logfile5)[names(logfile5) == 'subject'] = 'ParticipantID'
+names(logfile6)[names(logfile6) == 'subject'] = 'ParticipantID'
+
+#rename coloum X to Trial
+names(logfile1)[names(logfile1) == 'X'] = 'Trial'
+names(logfile2)[names(logfile2) == 'X'] = 'Trial'
+names(logfile3)[names(logfile3) == 'X'] = 'Trial'
+names(logfile4)[names(logfile4) == 'X'] = 'Trial'
+names(logfile5)[names(logfile5) == 'X'] = 'Trial'
+names(logfile6)[names(logfile6) == 'X'] = 'Trial'
+
+#merge datasets together
+log_merge = rbind(logfile1, logfile2, logfile3, logfile4, logfile5, logfile6)
+#plus 1 to trial
+log_merge$Trial = log_merge$Trial+1
+
+#merge logfiles into V1's dataset
+FixV1wLog = merge(FixV1, log_merge, all = "TRUE")
+SacV1wLog = merge(SacV1, log_merge, all = "TRUE")
+SamV1wLog = merge(SamV1, log_merge, all = "TRUE")
+
+#adding extra coloum and renaming. here for female/male actor in video
+for (file in 1:nrow(log_merge)){
+  if (grepl("m", log_merge$video[file])){
+    log_merge$ActorGender[file]='male'}
+  if (grepl("f", log_merge$video[file])){
+    log_merge$ActorGender[file]='female'}}
+
+#ostensiveness
+for (file in 1:nrow(log_merge)){
+  if (grepl("+", log_merge$video[file])){
+    log_merge$ostensiveness[file]='1'}
+  if (grepl("-", log_merge$video[file])){
+    log_merge$ostensiveness[file]='0'}}
+
+
+#directed/diverted 
+for (file in 1:nrow(log_merge)){
+  if (grepl("dir", log_merge$video[file])){
+    log_merge$orientation[file]='directed'}
+  if (grepl("div", log_merge$video[file])){
+    log_merge$orientation[file]='diverted'}}
+
+
+#Search order fixations
+
+FixV1$SearchType[FixV1$SearchOrder==1 & FixV1$Trial < 6]="Star" 
+FixV1$SearchType[FixV1$SearchOrder==1 & FixV1$Trial > 5]="Count" 
+
+FixV1$SearchType[FixV1$SearchOrder==2 & FixV1$Trial<6]="Count" 
+FixV1$SearchType[FixV1$SearchOrder==2 & FixV1$Trial>5]="Star" 
+
+#Search order saccades
+SacV1$SearchType[SacV1$SearchOrder ==1 & SacV1$Trial < 6]="Star"
+SacV1$SearchType[SacV1$SearchOrder ==1 & SacV1$Trial > 5]="Count"
+
+SacV1$SearchType[SacV1$SearchOrder ==2 & SacV1$Trial < 6]="Count"
+SacV1$SearchType[SacV1$SearchOrder ==2 & SacV1$Trial > 5]="Star"
+
+# Search order samples
+SamV1$SearchType[SamV1$SearchOrder==1 & SamV1$Trial < 6]="Star" 
+SamV1$SearchType[SamV1$SearchOrder==1 & SamV1$Trial > 5]="Count" 
+
+SamV1$SearchType[SamV1$SearchOrder==2 & SamV1$Trial<6]="Count" 
+SamV1$SearchType[SamV1$SearchOrder==2 & SamV1$Trial>5]="Star" 
+
+#merge logfiles into V1's dataset
+FixV1wLog = merge(FixV1, log_merge, by = "ParticipantID", all = "TRUE")
+SacV1wLog = merge(SacV1, log_merge, by = "ParticipantID", all = "TRUE")
+SamV1wLog = merge(SamV1, log_merge, by = "ParticipantID", all = "TRUE")
+```
+
+## CROSS-VALIDATION
+
+```{r}
+setwd("~/4semester/eyetracking")
+
+## Cross-validation 
+fixations2 = read.csv("FixationsV2.csv")
+
+models = c("PupilSize ~ Ostension*Directionality*Trial*Fixation +
+           (1+Directionality*Ostension*Trial*Fixation|ParticipantID)",
+                "PupilSize ~ Ostension*Directionality+Trial+Fixation +
+           (1+Directionality*Ostension*Trial*Fixation|ParticipantID)",
+                "PupilSize ~ Ostension+Directionality+Trial+Fixation +
+           (1+Directionality*Ostension*Trial*Fixation|ParticipantID)",
+                "PupilSize ~ Ostension*Directionality + Fixation + (1+Directionality*Ostension|ParticipantID)", 
+           "PupilSize ~ Ostension+Directionality+Fixation+(1+Directionality*Ostension*Fixation|ParticipantID)")
+
+
+
+socialData = subset(fixations2, Task == 'SocialEngagement')
+
+set.seed(1)
+
+foldSocial =  fold(socialData, k = 3, 
+                   cat_col = c('Directionality', 'Ostension'),
+                   id_col = 'ParticipantID') %>% arrange(.folds)
+
+devtools::install_github("LudvigOlsen/cvms", force= T)
+library(cvms)
+
+## cross validation 
+CVmodels = cross_validate(foldSocial, models, 
+                     folds_col = '.folds', 
+                     family='gaussian', 
+                     REML = FALSE)
+
+CVmodels
+
+
+## testing cross validation with log transform 
+CVlogModels = cross_validate(foldSocial, models, 
+                     folds_col = '.folds', 
+                     family='gaussian', 
+                     link = 'log',
+                     REML = FALSE)
+
+CVlogModels
+```
+
+## PLOTS
+```{r}
+## Ostenstion Pupil Size 
+
+ggplot(subset(fixations2, Task == 'SocialEngagement'), aes(ParticipantGender, PupilSize, colour = ParticipantGender)) + 
+  geom_boxplot() +
+  facet_grid(.~Ostension)
+
+
+
+## Boxplot of pupil size dependent on directionality across participant gender.
+
+ggplot(subset(fixations2, Task == 'SocialEngagement'), aes(ParticipantGender, PupilSize, colour = ParticipantGender)) + 
+  geom_boxplot() +
+  facet_grid(.~Directionality)
+
+
+# boxplot of pupil size across participants dependent on directionality (colour) and ostensiveness
+ggplot(subset(fixations2, Task == 'SocialEngagement'), aes(ParticipantGender, PupilSize, colour = Directionality)) + 
+  geom_boxplot() +
+  facet_grid(.~Ostension)
+```
+
