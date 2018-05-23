@@ -1,0 +1,626 @@
+---
+title: "EKSAMEN"
+author: "Katrine Tølbøll"
+date: "18 maj 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+Small plots about data
+
+```{r setup, include=FALSE}
+
+```
+
+
+
+
+
+
+```{r cars}
+library(pacman)
+p_load(tidyverse, rethinking, brms, gdata, readxl, brmstools,dplyr,ggplot2)
+setwd("C:/Users/katri/Desktop")
+library(ggplot2)
+
+eksamensdata=read.csv2("Eksamensdata-done.csv")
+as.data.frame(eksamensdata)
+
+#First stanardize the data, this premasurely should make everything easier to interprent 
+
+
+
+eksamensdata$score.s = ( eksamensdata$score - mean(eksamensdata$score) )/sd(eksamensdata$score)
+eksamensdata$condition.s = ( eksamensdata$Condition - mean(eksamensdata$Condition) )/sd(eksamensdata$Condition)
+eksamensdata$condition <- eksamensdata$condition - mean(eksamensdata$condition)
+eksamensdata$gender <- ifelse( eksamensdata$Gender=="Mand" ,1, 0 )
+
+data = subset(eksamensdata, donate == "1")
+
+data$gender.q <- ifelse( data$Gender=="Mand" ,1, 0 )
+data$logD = log(data$Donation)
+data$logS = log(data$score)
+
+
+
+```
+
+
+```{r pressure, echo=FALSE}
+
+#Model 1
+#Hvad er folks villighed til at donere? Er der forskel i villighed til at donere afhængig af conditions?
+
+#Først koder vi om folk donerer eller ej (binomial)
+eksamensdata$donate <- ifelse( eksamensdata$Donation=="0" ,0, 1 )
+
+model1.null <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a ,
+    a ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains = 4, cores=4)
+
+precis(model1.null)
+
+
+#Har condition en effekt på sansynlighed for at donere?
+#Først koder vi data til at have øjne//ikke øjne 
+eksamensdata$eyes <- ifelse( eksamensdata$Condition=="1" ,0, 1 )
+
+model1.eyenoeyes <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a + bE*eyes,
+    a ~ dnorm(0,1),
+    bE ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains = 4, cores=4)
+
+precis(model1.eyenoeyes)
+
+#Now let model if there is any difference between the two eyes condotions.
+
+model1.conditions <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bC*Condition,
+    a ~ dnorm(0,1),
+    bC ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains =4 , cores =4)
+
+precis(model1.conditions)
+
+
+#Compare the two models to see whether adding all conditions has an effect
+
+compare(model1.conditions, model1.eyenoeyes)
+
+#The model with eyes/noeyes is slightly better having 64% of the WAIC weight. Begge har en stor standard error så ved ikke helt hvad det har at sige. Måske skal man bare konkludere at modellerne er næsten lige gode, derfor betyder det ingenting om de ser tegnede øjne, rigtige øjne eller ingenting.
+
+#Har køn en effekt?
+eksamensdata$gender.q <- ifelse( eksamensdata$Gender=="Mand" ,1, 0 )
+
+model1.gender <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bG*gender.q,
+    a ~ dnorm(0,1),
+    bG ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains = 4, cores=4)
+
+precis(model1.gender)
+
+
+#Har empaty score noget at sige om en villighed til at donere?
+model1.empathy <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bS*score.s,
+    a ~ dnorm(0,1),
+    bS ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains=4, cores = 4)
+
+precis(model1.empathy)
+
+
+#Køn og score?
+
+model1.genderscore <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bG*gender.q+bS*score.s,
+    a ~ dnorm(0,1),
+    bG ~ dnorm(0,1),
+    bS ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains = 4, cores=4)
+
+precis(model1.genderscore)
+
+#Køn og condition?
+
+eksamensdata$gender.q <- ifelse( eksamensdata$Gender=="Mand" ,1, 0 )
+
+
+model1.gendereyes <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bG*gender.q + bC*eyes,
+    a ~ dnorm(0,1),
+    bG ~ dnorm(0,1),
+    bC ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains = 4, cores=4)
+
+precis(model1.gendereyes)
+
+#Both condition og score
+model1.conditionscore <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bS*score.s + bEyes*eyes,
+    a ~ dnorm(0,1),
+    bS ~ dnorm(0,1),
+    bEyes ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains =4, cores = 4)
+
+precis(model1.conditionscore)
+
+#Interaction scorecondition
+model1.interaction <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bS*score.s + bEyes*eyes+bSC*score.s*eyes,
+    a ~ dnorm(0,1),
+    bS ~ dnorm(0,1),
+    bEyes ~ dnorm(0,1),
+    bSC ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains=4, cores=4)
+
+#score køn gender?
+model1.scorekøneyes <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bS*score.s + bEyes*eyes+ bG*gender.q,
+    a ~ dnorm(0,1),
+    bS ~ dnorm(0,1),
+    bEyes ~ dnorm(0,1),
+    bG ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains=4, cores=4)
+
+precis(model1.scorekøneyes)
+
+#Interaction score køn
+model1.interactionscoregender <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bS*score.s + bG*gender.q+bSG*score.s*gender.q,
+    a ~ dnorm(0,1),
+    bS ~ dnorm(0,1),
+    bG ~ dnorm(0,1),
+    bSG ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains=4, cores=4)
+
+precis(model1.interactionscoregender)
+
+#Interaction eye køn
+model1.interactioneyesgender <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bE*eyes + bG*gender+bSE*eyes*gender,
+    a ~ dnorm(0,1),
+    bE ~ dnorm(0,1),
+    bG ~ dnorm(0,1),
+    bSE ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains=4, cores=4)
+
+precis(model1.interactioneyesgender)
+
+
+#Interaction score køn eye
+model1.interactioneyesgenderscore <- map2stan(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bE*eyes +bS*score.s + bG*gender.q+bSEG*eyes*gender.q*score.s,
+    a ~ dnorm(0,1),
+    bE ~ dnorm(0,1),
+    bG ~ dnorm(0,1),
+    bS ~ dnorm(0,1),
+    bSEG ~ dnorm(0,1)
+    ) ,
+  data=eksamensdata,
+  chains=4, cores=4)
+
+precis(model1.interactioneyesgenderscore)
+
+
+#Compare models
+compare(model1.null,model1.eyenoeyes,model1.conditionscore,model1.empathy,model1.interaction,model1.gender,model1.gendereyes,model1.genderscore,model1.scorekøneyes,model1.interactionscoregender,model1.interactioneyesgender,model1.interactioneyesgenderscore)
+
+
+
+coeftab(model1.null,model1.eyenoeyes,model1.conditionscore,model1.empathy,model1.interaction,model1.gender,model1.gendereyes,model1.genderscore,model1.scorekøneyes,model1.interactionscoregender,model1.interactioneyesgender,model1.interactioneyesgenderscore)
+
+#Plots
+plot(compare(model1.null,model1.eyenoeyes,model1.conditionscore,model1.empathy,model1.interaction,model1.gender,model1.gendereyes,model1.genderscore,model1.scorekøneyes,model1.interactionscoregender,model1.interactioneyesgenderscore,model1.interactioneyesgender))
+plot(coeftab(model1.null,model1.eyenoeyes,model1.conditionscore,model1.empathy,model1.interaction,model1.gender,model1.gendereyes,model1.genderscore,model1.scorekøneyes,model1.interactionscoregender,model1.interactioneyesgenderscore,model1.interactioneyesgender))
+
+
+
+
+
+#Model 2
+#Donerer empatiske mennesker mere end mindre empatiske mennsker på tværs af alle conditions
+#Er der en sammenhæng mellem doneret beløb og empati
+
+#Da score og donation kun kan være et positivt tal, bliver disse logtransformeret
+
+data$logS = log(data$score)
+
+#Hvor mange kvinder donerer? Hvor mange mænd?
+mænd =subset(data, Gender == "Mand")
+length(mænd$Gender)
+
+kvinder = subset(data, Gender == "Kvinde")
+length(kvinder$Gender)
+
+
+#Null model
+model2.null <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a ,
+    a ~ dnorm( 0 , 10 ) , 
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains = 4, cores = 4)
+
+precis(model2.null)
+
+
+#donation~score
+model2.score <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a + bS*logS ,
+    a ~ dnorm( 0 , 1 ) , 
+    bS ~ dnorm( 0 , 1 ) ,
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains=4, cores=4)
+
+precis(model2.score)
+
+
+#Donation ~ gender
+model2.gender <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a + bG*gender.q,
+    a ~ dnorm( 0 , 1 ) , 
+    bG ~ dnorm(0,1),
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains=4,cores=4)
+
+precis(model2.gender)
+
+#Donation ~ eyes
+model2.eyenoeyes <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a + bE*eyes,
+    a ~ dnorm( 0 , 1 ) , 
+    bE ~ dnorm(0,1),
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains=4,cores=4)
+
+precis(model2.eyenoeyes)
+
+
+#Donation~ condition
+model2.condition <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a + bC*Condition,
+    a ~ dnorm( 0 , 1 ) , 
+    bC ~ dnorm(0,1),
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains=4,cores=4)
+
+precis(model2.condition)
+
+compare(model2.eyenoeyes,model2.condition)
+
+
+#donation ~ score + gender
+model2.genderscore <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a + bG*gender+bS*logS,
+    a ~ dnorm( 0 , 1 ) , 
+    bG ~ dnorm(0,1),
+    bS ~ dnorm(0,1),
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains=4,cores=4)
+precis(model2.genderscore)
+
+
+plot(model2.genderscore)
+
+#donation ~ gender + condition
+model2.gendercondition <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a + bC*Condition+bG*gender.q,
+    a ~ dnorm( 0 , 1 ) , 
+    bC ~ dnorm(0,1),
+    bG ~ dnorm(0,1),
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains=4,cores=4)
+
+#donation ~ score + condition
+model2.conditionscore <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a + bC*Condition+bS*logS,
+    a ~ dnorm( 0 , 1 ) , 
+    bC ~ dnorm(0,1),
+    bS ~ dnorm(0,1),
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains=4,cores=4)
+
+
+
+#Interaction model score condition
+
+model2.interactionscorecondition <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a + bC*Condition+bS*logS+ bSC*logS*Condition,
+    a ~ dnorm( 0 , 1 ) , 
+    bC ~ dnorm(0,1),
+    bS ~ dnorm(0,1),
+    bSC~ dnorm(0,1),
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains=4,cores=4)
+
+precis(model2.interaction)
+
+#interaction gender score
+
+model2.interactionscoregender <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a + bG*gender.q+bS*logS+ bSG*logS*gender.q,
+    a ~ dnorm( 0 , 1 ) , 
+    bG ~ dnorm(0,1),
+    bS ~ dnorm(0,1),
+    bSG~ dnorm(0,1),
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains=4,cores=4)
+
+#interaction gender condition
+
+model2.interactionconditiongender <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a + bG*gender.q+bC*Condition+ bSG*logS*gender.q,
+    a ~ dnorm( 0 , 1 ) , 
+    bC ~ dnorm(0,1),
+    bS ~ dnorm(0,1),
+    bSG~ dnorm(0,1),
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains=4,cores=4)
+
+#Compare models
+
+compare(model2.null,model2.score,model2.condition,model2.gender,model2.conditionscore,model2.gendercondition,model2.genderscore,model2.interactionscoregender,model2.interactionscorecondition,model2.eyenoeyes,model2.interactionconditiongender)
+
+
+
+coeftab(model2.null,model2.score,model2.condition,model2.gender,model2.conditionscore,model2.gendercondition,model2.genderscore,model2.interactionscoregender,model2.interactionscorecondition,model2.eyenoeyes,model2.interactionconditiongender)
+
+
+
+#Plots
+plot(compare(model2.null,model2.score,model2.condition,model2.gender,model2.conditionscore,model2.gendercondition,model2.genderscore,model2.interactionscoregender,model2.interactionscorecondition,model2.eyenoeyes,model2.interactionconditiongender))
+plot(coeftab(model2.null,model2.score,model2.condition,model2.gender,model2.conditionscore,model2.gendercondition,model2.genderscore,model2.interactionscoregender,model2.interactionscorecondition,model2.eyenoeyes,model2.interactionconditiongender))
+
+
+
+
+#Posterior predictive plots
+#Since our null model is the best, a posterior predictive plot is made for that model
+
+#creating a posterior predictive plot
+ # call link without specifying new data
+# so it uses original data
+mu <- link( model2.score )
+# summarize samples across cases
+mu.mean <- apply( mu , 2 , mean )
+mu.HPDI <- apply( mu , 2 , HPDI )
+# simulate observations
+# again no new data, so uses original data
+ADOS.sim <- sim( model2.conditionscore , n=1e4 )
+ADOS.HPDI <- apply( ADOS.sim , 2 , HPDI )
+
+#plotting
+plot( mu.mean ~ eksamensdata$Donation.s , col=rangi2 , ylim=range(mu.HPDI) ,
+xlab="Observed Donation" , ylab="Predicted Donation" )
+abline( a=0 , b=1 , lty=2 )
+for ( i in 1:nrow(eksamensdata) )
+lines( rep(eksamensdata$Donation.s[i],2) , c(mu.HPDI[1,i],mu.HPDI[2,i]) ,
+col=rangi2 )
+
+
+
+
+```
+
+
+
+Lidt eksperimentiel hygge
+```{r setup, include=FALSE}
+#Does removing all psychology students affect the results in any way in willingness to donate across conditions and within conditions?
+
+eksamen = subset(eksamensdata, Profession == "ArbejdssÀgende")
+length(eksamensdata$Profession)
+35+3
+194-35+3
+
+model.donate1 <- map(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a ,
+    a ~ dnorm(0,10)
+    ) ,
+  data=eksamen )
+
+precis(model.donate1)
+
+logistic(2.04)
+
+#Har condition en effekt?
+model.eyenoeyes1 <- map(
+  alist(
+    donate ~ dbinom( 1 , p ) ,
+    logit(p) <- a +bEyes*eyes,
+    a ~ dnorm(0,10),
+    bEyes ~ dnorm(0,10)
+    ) ,
+  data=eksamen1)
+
+precis(model.eyenoeyes1)
+
+exp(-5.9)
+
+#realtive probaility a decrease in 0.3%
+
+logistic(2.4-5.9)
+
+#3% donate when they are exposed to eyes
+
+#A absolute change in 85%
+
+model2.null1 <- map2stan(
+  alist(
+    logD ~ dnorm( mu , sigma ) , 
+    mu <- a ,
+    a ~ dnorm( 0 , 1 ) , 
+    sigma ~ dunif( 0 , 1 )
+  ) ,
+  data=data,
+  chains = 4, cores = 4)
+
+precis(model2.null1)
+precis(model2.null)
+
+exp(4.24)
+exp(4.27)
+
+#Posterior predictior plots
+
+# Plot observations against predictions 
+mu <- link(model2.score, na.rm = TRUE)
+# summarize samples across cases
+mu.mean <- apply( mu , 2 , mean )
+mu.PI <- apply( mu , 2 , PI )
+# simulate observations
+# again no new data, so uses original data
+model.sim <- sim( model2.score1 , n=1000, na.rm = TRUE )
+model.PI <- apply( model.sim , 2 , PI  )
+
+
+# plot predictions against observed 
+plot( mu.mean ~ data$logD, col=rangi2 , ylim=range(mu.PI) ,
+    xlab="Observed logD" , ylab="Predicted logD" )
+abline( a=0 , b=1 , lty=2 )
+for ( i in 1:nrow(data) )
+    lines( rep(data$logD[i],2) , c(mu.PI[1,i],mu.PI[2,i]) ,
+        col=rangi2 )
+
+########
+
+#extracting samples from the posterior
+post.samples=extract.samples(model2.score)
+
+#plotting with the uncertainty
+#just to check if the model makes sense
+plot( logD ~ logS , data)
+abline(a=coef(model2.score1)['a'], b=coef(model2.score1)['bS'])
+for ( i in 1:100 )
+  abline( a=post.samples$a[i], b=post.samples$bS[i], col=col.alpha(rangi2, 0.5) )
+
+
+#Plot interaction effekt
+
+# make a plot window with three panels in a single row 7.28
+par(mfrow=c(1,2)) # 1 row, 3 columns
+# loop over values of water.c and plot predictions
+eye <- 0:1
+for ( g in 0:1 ) {
+  dt <- eksamensdata[eksamensdata$gender==g,]
+  plot( donate ~ gender , data=dt , col=rangi2 ,
+        main=paste("Gender",g) , xaxp=c(0,1,1) , ylim=c(0,1) ,
+        xlab="eyes" )
+  mu <- link( model1.interactioneyesgender , data=data.frame(gender=g,eyes=eye) )
+  mu.mean <- apply( mu , 2 , mean )
+  mu.PI <- apply( mu , 2 , PI , prob=0.97 )
+  lines( eye , mu.mean )
+  lines( eye , mu.PI[1,] , lty=2 )
+  lines( eye , mu.PI[2,] , lty=2 )
+  }
+
+
+```
+
+
+
+
