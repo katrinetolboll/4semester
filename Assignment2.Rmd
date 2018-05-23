@@ -193,7 +193,7 @@ HPDI(JoshSamples, prob = 0.5)
 #the highest posterior density interval for Josh is from 0.78 to 0.82  cog sci knowledge (50 % interval)
 
 #Mikkel
-p_grid[which.max(posterior_mikkel)
+p_grid[which.max(posterior_mikkel)]
 
 MikkelSamples = sample(p_grid, prob=posterior_mikkel , size=1e5 , replace=TRUE )
 dens(MikkelSamples)
@@ -330,7 +330,7 @@ HPDI(JoshSamples, prob = 0.5)
 #the highest posterior density interval for Josh is from 0.78 to 0.82  cog sci knowledge (50 % interval)
 
 #Mikkel
-p_grid[which.max(posterior_mikkel)
+p_grid[which.max(posterior_mikkel)]
 
 MikkelSamples = sample(p_grid, prob=posterior_mikkel , size=1e5 , replace=TRUE )
 dens(MikkelSamples)
@@ -463,7 +463,7 @@ HPDI(JoshSamples, prob = 0.5)
 #the highest posterior density interval for Josh is from 0.805 to 0.808  cog sci knowledge (50 % interval)
 
 #Mikkel
-p_grid[which.max(posterior_mikkel)
+p_grid[which.max(posterior_mikkel)]
 
 MikkelSamples = sample(p_grid, prob=posterior_mikkel , size=1e5 , replace=TRUE )
 dens(MikkelSamples)
@@ -582,7 +582,7 @@ HPDI(JoshSamples, prob = 0.5)
 #the highest posterior density interval for Josh is from 0.805 to 0.808  cog sci knowledge (50 % interval)
 
 #Mikkel
-p_grid[which.max(posterior_mikkel)
+p_grid[which.max(posterior_mikkel)]
 
 MikkelSamples = sample(p_grid, prob=posterior_mikkel , size=1e5 , replace=TRUE )
 dens(MikkelSamples)
