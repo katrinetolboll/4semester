@@ -1,0 +1,573 @@
+---
+title: "Assignment3"
+author: "RF"
+date: "3/6/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Multivariate linear models
+
+In this assignment you will investigate the relation between different aspects of IQ and symptom severity in ASD (as measured by ADOS). The assignment is meant to make you practice on linear models, multiple predictors and interactions.
+
+The data you will use is the outcome of the psychological testing of the children you analyzed in methods 3.
+Data: https://www.dropbox.com/s/hom2qnmp9hyfwmu/Assignment3Data.csv?dl=0
+The data consists of ChildID, gender, age, diagnosis (ASD), symptom severity (ADOS), several aspects of IQ (NonVerbal/Perceptual,Verbal,Social) and the visit at which the tests were administered. The questions should be answered by focusing on visit 1.
+
+```{r}
+library(pacman)
+devtools::install_github("thomasp85/patchwork")
+source("https://install-github.me/r-lib/crancache")
+library(crancache)
+p_load(tidyverse, rethinking, patchwork, pastecs)
+setwd("~/4semester")
+
+d1 = read.csv("Assignment3Data.csv")
+
+#making a subset containing only values from visit 1 and children with ASD
+d = subset(d1, Visit == 1 & ASD == 1)
+
+```
+The questions you will have to answer are:
+
+1. Assess the relation between symptom severity and IQ (focus on visit 1 and children with ASD) and report the model, a plot of the model, a couple of lines describing the quality of the model and interpreting the results. P.S. Should you scale? P.P.S. Don't forget to motivate your priors. P.P.P.S. At least one plot for results and a plot for quality of each model (here and in the next questions) would be appreciated.
+1.1. Verbal IQ and ADOS
+```{r}
+#creating model, using verbal IQ to predict ADOS
+#scaling variables first (need the [,] other the column is interpreted as a matrix (why scale(), why..) which ggplot hates)
+d$ScaleADOS = scale(d$ADOS)[,]
+d$ScaleVIQ = scale(d$VerbalIQ)[,]
+d$ScaleNVIQ = scale(d$NonVerbalIQ)[,]
+d$ScaleSIQ = scale(d$SocialIQ)[,]
+
+round(stat.desc(d$ADOS), 4)
+round(stat.desc(d$VerbalIQ), 4)
+round(stat.desc(d$NonVerbalIQ), 4)
+round(stat.desc(d$SocialIQ), 4)
+
+##can also scale several variables like this (courtesy of Kenneth)
+#rescalelist = c("NonVerbalIQ", "VerbalIQ", "SocialIQ", "ADOS") #list of variables which should be rescaled 
+#v1ASD.s = v1ASD[, colnames(v1ASD) %in% rescalelist] %>% #select rows to rescale 
+#  lapply(. , function(x) scale(x, center = mean(x, na.rm =T), scale = sd(x, na.rm = T))) %>% #adding mean and sd manually to add the na.rm = T to removes NA's 
+#  cbind(. , v1ASD[,! colnames(v1ASD) %in% rescalelist]) #bind with remaining rows 
+
+m1.1 <- map(
+  alist(
+    ScaleADOS ~ dnorm( mu , sigma ) , #assuming ADOS is normally distributed
+    mu <- a + b*ScaleVIQ ,
+    a ~ dnorm( 0 , 1 ) , #ADOS has a mean of approx 14 and ranges from 6-21 in the previous assignment
+    b ~ dnorm( 0 , 1 ) , #we don't know much about the relationship, so putting a liberal prior
+    sigma ~ dunif( 0 , 3 ) #setting a quite generous SD since we don't know much
+  ) ,
+  data=d )
+precis(m1.1)
+#precis(m1.1, corr = T) 
+
+#plotting the raw data
+ggplot(d, aes(VerbalIQ, ADOS)) +
+  geom_point()
+
+#ggplot(d, aes(ScaleVIQ, ScaleADOS)) +
+#  geom_point()
+
+#extracting samples from the posterior
+post.samples=extract.samples(m1.1)
+
+#plotting with the uncertainty
+#just to check if the model makes sense
+plot(ScaleADOS ~ ScaleVIQ, d)
+abline(a=coef(m1.1)['a'], b=coef(m1.1)['b'])
+for ( i in 1:1000 )
+abline( a=post.samples$a[i] , b=post.samples$b[i] , col=col.alpha(rangi2, 0.5) )
+#seems quite alright
+
+# define sequence of weights to compute predictions for 
+# these values will be on the horizontal axis
+ScaleVIQ.seq <- seq( from=-2 , to=2.5 , by=0.1 )
+
+# use link to compute mu for each sample from posterior and for each value in scaleVIQ.seq
+mu <- link( m1.1 , data=data.frame(ScaleVIQ=ScaleVIQ.seq) )
+
+t(HPDI(d$ADOS))
+# use type="n" to hide raw data
+plot( ScaleADOS ~ ScaleVIQ , d , type="n" )
+# loop over samples and plot each mu value
+for ( i in 1:nrow(mu) )
+points( ScaleVIQ.seq , mu[i,] , pch=16 , col=col.alpha(rangi2,0.1) )
+
+#summarize the distribution of mu
+mu.mean <- apply( mu , 2 , mean )
+mu.HPDI <- apply( mu , 2 , HPDI , prob=0.89 )
+
+# plot raw data
+# fading out points to make line and interval more visible
+plot( ScaleADOS ~ ScaleVIQ , data=d , col=col.alpha(rangi2,0.5) )
+# plot the MAP line, aka the mean mu for each weight
+lines( ScaleVIQ.seq , mu.mean )
+# plot a shaded region for 89% HPDI
+shade( mu.HPDI , ScaleVIQ.seq )
+
+#simulating ADOS values for the specific VerbalIQ values in the previously defined sequence
+sim.ados <- rethinking::sim( m1.1 , data=list(ScaleVIQ=ScaleVIQ.seq) )
+#summarizing the distribution of the simulation
+ados.HPDI <- apply( sim.ados , 2 , HPDI , prob=0.89 )
+
+# plot raw data
+plot( ScaleADOS ~ ScaleVIQ , d , col=col.alpha(rangi2,0.5) )
+# draw MAP line
+lines( ScaleVIQ.seq , mu.mean )
+# draw HPDI region for line
+shade( mu.HPDI , ScaleVIQ.seq )
+# draw PI region for simulated heights
+shade( ados.HPDI , ScaleVIQ.seq )
+
+```
+
+That was a lot of hassle.. creating a function to create the last plot
+
+#Function to create the plot
+```{r}
+#Plot to make the plot with MAP line, HPDI for the line and HPDI for the model with all the uncertainty
+#takes a model, the x value as a string (ie. in ''), y value in string and the dataframe.
+fancypantsplot <- function(model, x, y, dataframe) {
+ #extracting data from the dataframe 
+  xd <- dplyr::select(dataframe, x) 
+  yd <- dplyr::select(dataframe, y)
+  
+  #calculate the prior data - the next 4 lines basically recreate the link function (see page 107)
+  post <- extract.samples(model) 
+  mu.link <- function(x) post$a + post$b*x 
+  x.seq <- seq( from=min(xd) , to=max(xd) , by=0.1 ) 
+  mu <- sapply( x.seq , mu.link ) 
+  #summarize the distribution of mu
+  mu.mean <- apply( mu , 2 , mean ) 
+  mu.HPDI <- apply( mu , 2 , HPDI , prob=0.89 ) 
+  
+  temp_list = list(x.seq); names(temp_list) <- x  #naming the vector in the list (since the sim function apparently  requires it - thank Kenneth)
+  sim.x <- sim( model , data=temp_list ) 
+  x.HPDI <- apply( sim.x , 2 , HPDI , prob=0.89 )
+  
+  #creating dataframe containing only the x and y values
+  new_df = data.frame(xd, yd)
+  #giving the columns new names that can be called in the plot function
+  names(new_df) <- c('x1', 'y1')
+  # plot raw data
+  plot( y1 ~ x1 , new_df, col=col.alpha(rangi2,0.5) )
+  # draw MAP line
+  lines( x.seq , mu.mean )
+  # draw HPDI region for line
+  shade( mu.HPDI , x.seq )
+  # draw HPDI region for simulated heights
+  shade( x.HPDI , x.seq )
+}
+
+#IN ACTION!
+fancypantsplot(m1.1, 'ScaleVIQ', 'ScaleADOS', d)
+
+```
+#Kenneth made an even better version in ggplot (typical..) using it instead
+```{r}
+gggplot = function(model, x = NULL , y = NULL, dataframe){ 
+   #where: 
+  #model is a model resulting from MAP 
+  #x is the x variable as a string (can be left unspecified) 
+  #y is the y variable as a string (can be left unspecified) 
+  #dataframe is the dataframe from which the model is trained upon 
+  #requires packages: dplyr, ggplot2, stringr and rethinking
+  
+  if (is.null(y) == T){ 
+    #if y isn't specified - extract y 
+    temp <- flist_untag(model@formula)[[1]] 
+    y <- as.character(temp[[2]])
+    } 
+  if (is.null(x) == T){ 
+    #if x isn't specified - extract x 
+      temp <- flist_untag(model@formula)[[2]] 
+      x <- gsub(" ","",gsub(".*\\*","",as.character(temp[[3]])[3])) 
+  }
+  
+   #extracting data from the dataframe 
+  xd <- dplyr::select(dataframe, x) 
+  yd <- dplyr::select(dataframe, y)
+  
+   #calculate the prior data 
+  post <- extract.samples(model) 
+  #posterior from samples 
+  mu.link <- function(x) post$a + post$b*x 
+  VIQ.seq <- seq( from=min(xd) , to=max(xd) , by=0.1 ) 
+  mu <- sapply( VIQ.seq , mu.link ) 
+  mu.mean <- apply( mu , 2 , mean ) 
+  mu.HPDI <- apply( mu , 2 , HPDI , prob=0.89 ) 
+  temp_list = list(VIQ.seq); names(temp_list) <- x 
+  #naming the vector in the list (since the sim function requires it) 
+  sim.VIQ <- rethinking::sim( model , data=temp_list ) 
+  VIQ.PI <- apply( sim.VIQ , 2 , PI , prob=0.89 )
+
+  #transform the data from ggplot 
+    #for making the line 
+  temp_df <- data.frame(VIQ.seq = VIQ.seq, mu.mean = mu.mean) 
+  #for making the HDPI 
+  temp_matrix <- t(data.frame(mu.HPDI = mu.HPDI)) 
+  #t() is a tranpose function which returns a matrix 
+  temp_df1 = data.frame(lower = temp_matrix[,1], upper = temp_matrix[,2], mu.mean = mu.mean, VIQ.seq = VIQ.seq)
+   #for making the PI 
+  temp_matrix <- t(data.frame(VIQ.PI = VIQ.PI)) 
+  temp_df2 = data.frame(lower = temp_matrix[,1], upper = temp_matrix[,2], mu.mean = mu.mean, VIQ.seq = VIQ.seq) 
+  #for the points 
+  dataframe = data.frame(xd, yd) 
+  #taking the data to new column as to chose the name (maintaining old name for the names on the plot) 
+  dataframe$c1 = dataframe[,1] 
+  dataframe$c2 = dataframe[,2]
+  
+   #make the plot 
+  grob = ggplot(dataframe, aes(x = c1, y = c2)) + 
+    geom_ribbon(data = temp_df2, aes(x = VIQ.seq, y = mu.mean, ymin = lower, ymax = upper), fill = "grey70", alpha = 2/3) + 
+    geom_ribbon(data = temp_df1, aes(x = VIQ.seq, y = mu.mean, ymin = lower, ymax = upper), fill = "grey83", alpha = 2/3) + 
+    geom_line(data = temp_df, aes(x = VIQ.seq, y = mu.mean))+ 
+    geom_point(color = "navyblue", shape = 1, size = 1.5, alpha = 2/3)+ 
+    xlab(colnames(dataframe)[1]) + 
+    ylab(colnames(dataframe)[2]) 
+  #using the names for the axis 
+  return(grob) 
+  } #go go gadget fancy plot
+
+#gggplot(model = m1.1, x = 'ScaleVIQ', y = 'ScaleADOS', dataframe = d)
+
+VIQ = gggplot(m1.1, dataframe = d)
+VIQ
+#so nice
+
+```
+
+       Mean StdDev  5.5% 94.5%  
+a      0.00   0.12 -0.19  0.19
+b     -0.71   0.12 -0.90 -0.52  
+sigma  0.68   0.08  0.55  0.81
+
+
+There seems to be a quite strong negative correlation between verbal IQ and ADOS. When verbal IQ increases by 1 standard deviation (corresponding to 7.6 points on the scale) ADOS decreases by 0.71 sd (corresponding to 3.3 points on the scale). In other words, the higher the IQ, the less symptoms ADOS.
+
+We chose to scale both variables mainly for the sake of interpretability. The verbal IQ and ADOS might be defined in terms of some characterics (e.g in the case of 'normal' IQ which has a mean of 100), but we are unaware of this. Since the numbers are otherwise fairly arbitrary (is an increase in 5 verbalIQ a lot? Is 15?) we chose to scale, since it is easy to grasp the magnitude of effects in terms of standard deviation. 
+
+We choose very liberal and uninformed priors all around, since we have very little prior knowledge of the distribution of values beforehand. Since we values are scaled we decided to set the mean for both alpha, beta and sigma to be 0. For the SD in the prior for alpha and the beta for verbal IQ we set it to 1 for a quite liberal prior.
+Allowing sigma to be practically completely driven by the data by setting its sd to 3.
+
+# 1.2. Non Verbal IQ and ADOS
+
+```{r}
+
+#make a model
+m1.2 <- rethinking::map(
+  alist(
+    ScaleADOS ~ dnorm( mu , sigma ) , #assuming ADOS is normally distributed
+    mu <- a + b*ScaleNVIQ ,
+    a ~ dnorm( 0 , 1 ) , #ADOS has a mean of approx 14 and ranges from 6-21 in the previous assignment
+    b ~ dnorm( 0 , 1 ) , #we don't know much about the relationship, so putting a liberal prior
+    sigma ~ dunif( 0 , 3 ) #setting a quite generous SD since we don't know much
+  ) ,
+  data=d )
+precis(m1.2)
+
+#sanity check
+#extracting samples from the posterior
+post.samples=extract.samples(m1.2)
+
+#plotting with the uncertainty
+#just to check if the model makes sense
+plot(ScaleADOS ~ ScaleNVIQ, d)
+abline(a=coef(m1.1)['a'], b=coef(m1.1)['b'])
+for ( i in 1:1000 )
+abline( a=post.samples$a[i] , b=post.samples$b[i] , col=col.alpha(rangi2, 0.5) )
+#seems quite alright
+
+NVIQ = gggplot(m1.2, dataframe = d)
+NVIQ
+```
+       Mean StdDev  5.5% 94.5%
+a      0.00   0.14 -0.22  0.22
+b     -0.57   0.14 -0.79 -0.35
+sigma  0.80   0.10  0.65  0.96
+
+There is once again a quite strong negative correlation between ADOS and non-verbal IQ. A change in 1 sd of non-verbal IQ (corresponding to 5.4 points on the scale) corresponds to a decrease in ADOS by 0.57 sd (corresponding to 2.6 points on the scale). There is very slightly more uncertainty in this estimate than in the one for verbal IQ, but their effects highly similar. 
+
+We used the scaled variables for the same reason as for verbal IQ. 
+
+The priors were once again very uninformative since we have very little prior information of what to expect
+
+
+# 1.3. Social IQ and ADOS
+
+```{r}
+
+#make a model
+m1.3 <- rethinking::map(
+  alist(
+    ScaleADOS ~ dnorm( mu , sigma ) , #assuming ADOS is normally distributed
+    mu <- a + b*ScaleSIQ ,
+    a ~ dnorm( 0 , 1 ) , #ADOS has a mean of approx 14 and ranges from 6-21 in the previous assignment
+    b ~ dnorm( 0 , 1 ) , #we don't know much about the relationship, so putting a liberal prior
+    sigma ~ dunif( 0 , 3 ) #setting a quite generous SD since we don't know much
+  ) ,
+  data=d )
+precis(m1.3)
+
+
+#sanity check
+#extracting samples from the posterior
+post.samples=extract.samples(m1.3)
+
+#plotting with the uncertainty
+#just to check if the model makes sense
+plot(ScaleADOS ~ ScaleSIQ, d)
+abline(a=coef(m1.1)['a'], b=coef(m1.1)['b'])
+for ( i in 1:1000 )
+abline( a=post.samples$a[i] , b=post.samples$b[i] , col=col.alpha(rangi2, 0.5) )
+#doesn't look that great - most SIQ values cluster quite low on the scale
+
+
+SIQ = gggplot(m1.3, dataframe = d)
+```
+       Mean StdDev  5.5% 94.5%
+a      0.00   0.12 -0.20  0.20
+b     -0.66   0.13 -0.86 -0.46
+sigma  0.73   0.09  0.59  0.87
+
+Just as the other two models there is a negative relationship between ADOS and social IQ. When social IQ increases by 1 sd (corresponding to 11.3 on the scale) ADOS decreases by 0.66 sd (corresponding to 3.1 on the scale). The plots are not as nice for this variable as for the others. There seems to be more clustering on the low values of SIQ than for the other variables. 
+```{r}
+VIQ + NVIQ + SIQ
+```
+
+As is obvious from the three plots, the relationship between the three variables and ADOS is very, very similar.
+
+
+#2. Do the different aspects of IQ account for different portions of the variance in ADOS? 
+```{r}
+#Fitting the variables to each other to get plots of the residuals
+
+#creating model for residuals of verbalIQ 'controlling' for NVIQ and SIQ
+mVIQ <- map(
+  alist(
+    ScaleVIQ ~ dnorm(mu, sigma),
+    mu <- a + b1*ScaleNVIQ + b2*ScaleSIQ,
+    a ~ dnorm(0,10),
+    b1 ~ dnorm(0,1),
+    b2 ~ dnorm(0,1),
+    sigma ~ dunif(0, 10)
+  ),
+  data = d)
+
+#creating model for residuals of non-verbalIQ 'controlling' for VIQ and SIQ
+mNVIQ <- map(
+  alist(
+    ScaleNVIQ ~ dnorm(mu, sigma),
+    mu <- a + b1*ScaleVIQ + b2*ScaleSIQ,
+    a ~ dnorm(0,10),
+    b1 ~ dnorm(0,1),
+    b2 ~ dnorm(0,1),
+    sigma ~ dunif(0, 10)
+  ),
+  data = d)
+
+#creating model for residuals of social IQ 'controlling' for NVIQ and VIQ
+mSIQ <- map(
+  alist(
+    ScaleSIQ ~ dnorm(mu, sigma),
+    mu <- a + b1*ScaleNVIQ + b2*ScaleVIQ,
+    a ~ dnorm(0,10),
+    b1 ~ dnorm(0,1),
+    b2 ~ dnorm(0,1),
+    sigma ~ dunif(0, 10)
+  ),
+  data = d)
+
+#creating function to calculate residuals
+resids = function(model, outcome, predictor1, predictor2) {
+  #compute expected value at MAP, for each  value
+  mu <- coef(model)['a'] + coef(model)['b1']*predictor1 + coef(model)['b2']*predictor2
+  #compute residual for each value
+  return(m.resid <- outcome - mu)
+}
+#calculating residuals and putting in dataset with ADOS
+mVIQ_res = resids(mVIQ, d$ScaleVIQ, d$ScaleNVIQ, d$ScaleSIQ)
+mNVIQ_res = resids(mNVIQ, d$ScaleNVIQ, d$ScaleVIQ, d$ScaleSIQ)
+mSIQ_res = resids(mSIQ, d$ScaleSIQ, d$ScaleNVIQ, d$ScaleVIQ)
+
+res_df = data.frame(mVIQ_res, mNVIQ_res, mSIQ_res, d$ScaleADOS)    
+
+#plotting
+mVIQ_resplot = ggplot(res_df, aes(mVIQ_res, d.ScaleADOS)) +
+  geom_point() +
+  geom_smooth(method='lm') +
+  geom_vline(xintercept=0, linetype = 'dotted') +
+  xlim(-2,2)
+
+mNVIQ_resplot = ggplot(res_df, aes(mNVIQ_res, d.ScaleADOS)) +
+  geom_point() +
+  geom_smooth(method='lm') +
+  geom_vline(xintercept=0, linetype = 'dotted')+
+  xlim(-2,2)
+
+mSIQ_resplot = ggplot(res_df, aes(mSIQ_res, d.ScaleADOS)) +
+  geom_point() +
+  geom_smooth(method='lm')+
+  geom_vline(xintercept=0, linetype = 'dotted') +
+  xlim(-2,2)
+
+mVIQ_resplot + mNVIQ_resplot + mSIQ_resplot
+cor(select(d, ScaleVIQ, ScaleNVIQ, ScaleSIQ))
+
+```
+
+By inspecting the plots it seems non-verbal IQ does not contribute a lot that is not covered by verbal IQ or social IQ. Verbal IQ explains slightly more unique variance than non-verbal IQ, while Social IQ seems to be the one that explains the most unique variance. Overall, it seems like non-verbal IQ and verbal IQ explains much of the same variance, whereas social IQ has more unique variance. 
+
+All of the variables have unique variance, however how much is very uncertain. The grey standard error shade shows that they might all just be straight lines. 
+
+# 2.1. Does it make sense to have all IQ measures in the same model? First write a few lines answering the question and motivating your answer, including a discussion as to what happens when you put all of them in the same model. Then build a model following your answer. If your answer is "no", you are not free, you still have to answer: are there alternative ways of answering the question?
+
+There seems to be some sense in including all the variables in the model. By inspecting the correlations between the variables, it is clear that there is moderate to strong correlation between verbal IQ and non-verbal IQ (0.68), same degree between verbal IQ and social iq (0.61) but only a weak to moderate correlation between social IQ and non-verbal IQ. This information combined with the residual plots suggests that each variable accounts for some unique variance. However, a lot of this will be shared, so it is expected that the beta values for each measure of IQ will be lower in the 'big' model than they are in the individual models. 
+The betas are still expected to be some way from 0, as it seems they all have unique variance to account for. 
+
+
+# 2.2. Build the model, assess its quality, write a few lines interpreting the results.
+
+```{r}
+#Creating a model with all the measures of IQ
+m1.4 <- rethinking::map(
+  alist(
+    ScaleADOS ~ dnorm( mu , sigma ) , #assuming ADOS is normally distributed
+    mu <- a + b_viq*ScaleVIQ+b_nviq*ScaleNVIQ+b_siq*ScaleSIQ ,
+    a ~ dnorm( 0 , 1 ) , #ADOS has a mean of approx 14 and ranges from 6-21 in the previous assignment
+    b_viq ~ dnorm( 0 , 1 ) , #we don't know much about the relationship, so putting a liberal prior
+    b_nviq ~ dnorm( 0 , 1 ) ,
+    b_siq ~ dnorm( 0 , 1 ) ,
+    sigma ~ dunif( 0 , 10 ) #setting a quite generous SD since we don't know much
+  ) ,
+  data=d )
+
+library(rethinking)
+precis(m1.4)
+plot(precis(m1.4))
+cor(select(d, ScaleVIQ, ScaleNVIQ, ScaleSIQ))
+
+#creating a posterior predictive plot
+ # call link without specifying new data
+# so it uses original data
+mu <- link( m1.4 )
+# summarize samples across cases
+mu.mean <- apply( mu , 2 , mean )
+mu.HPDI <- apply( mu , 2 , HPDI )
+# simulate observations
+# again no new data, so uses original data
+ADOS.sim <- sim( m1.4 , n=1e4 )
+ADOS.HPDI <- apply( ADOS.sim , 2 , HPDI )
+
+#plotting
+plot( mu.mean ~ d$ScaleADOS , col=rangi2 , ylim=range(mu.HPDI) ,
+xlab="Observed ADOS" , ylab="Predicted ADOS" )
+abline( a=0 , b=1 , lty=2 )
+for ( i in 1:nrow(d) )
+lines( rep(d$ScaleADOS[i],2) , c(mu.HPDI[1,i],mu.HPDI[2,i]) ,
+col=rangi2 )
+
+```
+        Mean StdDev  5.5% 94.5%
+a       0.00   0.10 -0.16  0.16
+b_viq  -0.36   0.16 -0.62 -0.10
+b_nviq -0.19   0.14 -0.42  0.03
+b_siq  -0.37   0.13 -0.58 -0.16
+sigma   0.60   0.07  0.49  0.72
+
+Inspecting the table of coefficients and the plot graphically depicting them, non-verbal IQ explains the least unique variance as expected. Social IQ has the lowest variance of the three predictors which is probably due to it not being strongly correlated with non-verbal IQ. The model does not seem to consistently over or underestimate ADOS, however there is an issue with childID 14, who has a very low ADOS score which the model fails to predict.
+
+
+
+3. Let's now include also the TD children. Does it make sense to ask whether IQ and ADOS are related? Motivate your answer. In any case, if you wanted to build a model to answer that question, which model would you build? Run the model, assess its quality, write a few lines interpreting the results.
+
+It doesn't make much sense anymore to ask whether IQ and ADOS are related since TD children practically all have ADOS scores of 0. This means the correlation between ADOS and any measures for the TD children will be close to 0. The model would likely still show a correlation between the IQ measures and ADOS, but the uncertainty will be much bigger and the slope flatter. I would build exactly the same model as in 2.2, but on the whole dataset (still at visit 1) 
+
+```{r}
+d2 = subset(d1, Visit == 1)
+#a few NA, removing them
+d2 = na.omit(d2)
+
+d2$ScaleADOS = scale(d2$ADOS)[,]
+d2$ScaleVIQ = scale(d2$VerbalIQ)[,]
+d2$ScaleNVIQ = scale(d2$NonVerbalIQ)[,]
+d2$ScaleSIQ = scale(d2$SocialIQ)[,]
+
+#fitting the model
+m1.6 <- rethinking::map(
+  alist(
+    ScaleADOS ~ dnorm( mu , sigma ) , #assuming ADOS is normally distributed
+    mu <- a + b_viq*ScaleVIQ+b_siq*ScaleSIQ+b_nviq*ScaleNVIQ  ,
+    a ~ dnorm( 0 , 1 ) , #ADOS has a mean of approx 14 and ranges from 6-21 in the previous assignment
+    b_viq ~ dnorm( 0 , 1 ) , #we don't know much about the relationship, so putting a liberal prior
+    b_siq ~ dnorm( 0 , 1 ) ,
+    b_nviq ~ dnorm(0,1),
+    sigma ~ dunif( 0 , 10 ) #setting a quite generous SD since we don't know much
+  ) ,
+  data=d2 )
+
+library(rethinking)
+precis(m1.6)
+plot(precis(m1.6))
+
+#creating a posterior predictive plot
+ # call link without specifying new data
+# so it uses original data
+mu <- link( m1.6 )
+# summarize samples across cases
+mu.mean <- apply( mu , 2 , mean )
+mu.HPDI <- apply( mu , 2 , HPDI )
+# simulate observations
+# again no new data, so uses original data
+ADOS.sim <- sim( m1.6 , n=1e4 )
+ADOS.HPDI <- apply( ADOS.sim , 2 , HPDI )
+
+#plotting
+plot( mu.mean ~ d2$ScaleADOS , col=rangi2 , ylim=range(mu.HPDI) ,
+xlab="Observed ADOS" , ylab="Predicted ADOS" )
+abline( a=0 , b=1 , lty=2 )
+for ( i in 1:nrow(d2) )
+lines( rep(d2$ScaleADOS[i],2) , c(mu.HPDI[1,i],mu.HPDI[2,i]) ,
+col=rangi2 )
+
+
+
+```
+
+Having TD children in the model very negatively affects predictive power. As expected, the TD children cluster together at the very bottom, skewing the model and creating very bad predictions; undershooting low values and overshooting higher values.
+Inspecting the betas reveals that verbal IQ and non-verbal IQ do not really explain any unique variance after accounting for the two other measures. Social IQ is highly influential, which is probably due to social IQ being one of the factors that seperate TD and ASD children the most. 
+
+4. Let's discuss contents:
+4.1. You have three scores for IQ, do they show shared variance? Is that the same in TD and ASD? What does that tell us about IQ?
+
+```{r}
+dTD = subset(d1, Visit == 1 & ASD == 0)
+dTD = na.omit(dTD)
+cor(select(dTD, VerbalIQ, NonVerbalIQ, SocialIQ))
+```
+
+The shared variance is very different in TD children and ASD children. All measures of IQ are quite correlated for ASD children (>0.5), but only non-verbal IQ and verbal IQ are significantly correlated for TD children (>0.5). Seems to suggest that (bullshit alert) that IQ is one general measure for people with ASD, but that it is different dimensions/things for TD children.
+
+4.2. You have explored the relation between IQ and ADOS. How do you explain that relation from a cognitive perspective? N.B. You can present alternative hypotheses.
+
+We will argue that being better at reading facial expression (social IQ) as well as understanding verbal and non verbal cues (verbal and non-verbal IQ) facilitates good social interactions and therefore serves to decrease severity of symptoms of ASD (as measured in ADOS) in children diagnosed with ASD
+
+The results are a bit confusing. 
+For ASD children we can see that Social IQ & Verbal IQ are the strongest predictors of ADOS scores, Verbal IQ correlated with both Non-Verbal & Social IQ, but Social & NOn-Verbal IQ are not very correlated. 
+
+In TD children we see that Non-Verbal and Verbal IQ are highly correlated, but that Social IQ is less corrleated from both of them. 
+
+We can see Social IQ has an effect on ADOS for both ASD & TD children, despite Social IQ & Verbal IQ being more correlated in ASD children. This may be due to that ASD children may be more reliant on Verbal cues for their social interactions, whereas TD children may be more reliant on non-verbal interpretations (such as facial expressions) for social intelligence. 
+
+We will argue that being better at reading facial expression (social IQ) as well as understanding verbal and non verbal cues (verbal and non-verbal IQ) facilitates good social interactions and therefore serves to decrease severity of symptoms of ASD (as measured in ADOS) in children diagnosed with ASD
+
+5. Bonus questions: Including measurement errors. 
+5.1. Let's assume that ADOS has a measurement error of 1. How would you model that in any of the previous models? 
+5.2. We know that IQ has an estimated measurement error of 2.12. How would you include that? 
+
+
