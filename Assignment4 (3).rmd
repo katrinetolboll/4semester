@@ -1,0 +1,327 @@
+---
+title: "Assignment 4 - Applying meta-analytic priors"
+author: "Riccardo Fusaroli"
+date: "3/16/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment 4
+
+In this assignment we do the following:
+- we reproduce the meta-analysis of pitch SD from last semester in a Bayesian framework
+- we reproduce the pitch SD in schizophrenia analysis from last semester using both a conservative and a meta-analytic prior
+- we assess the difference in model quality and estimates using the two priors.
+
+The questions you need to answer are: What are the consequences of using a meta-analytic prior? Evaluate the models with conservative and meta-analytic priors. Discuss the effects on estimates. Discuss the effects on model quality. Discuss the role that meta-analytic priors should have in scientific practice. Should we systematically use them? Do they have drawbacks? Should we use them to complement more conservative approaches? How does the use of meta-analytic priors you suggest reflect the skeptical and cumulative nature of science?
+
+### Step by step suggestions
+
+Step 1: Reproduce the meta-analysis of pitch sd from previous studies of voice in schizophrenia
+- the data is available as Assignment4MetaData.xlsx
+- Effect size (cohen's d), sd and variance are already calculated (you're welcome!)
+- Since we're only interested in getting a meta-analytic effect size, let's take a shortcut and use bromance magic (brms): https://mvuorre.github.io/post/2016/2016-09-29-bayesian-meta-analysis/
+
+```{r}
+setwd("~/4semester")
+install.packages("pacman")
+library(pacman)
+p_load(tidyverse, rethinking, brms, gdata, readxl, brmstools, patchwork)
+
+#devtools::install_github("mvuorre/brmstools")
+library(brmstools)
+
+dfP = read.csv("Assignment4PitchDatav2.csv")
+df2 = read.csv("Assignment4MetaData.csv", stringsAsFactors = F)
+
+```
+
+```{r}
+df2$MeanES = as.numeric(df2$MeanES)
+df2$SdES = as.numeric(df2$SdES)
+
+# the |se(SdES) behaves as a weight. Meaning, MeanES has an uncertainty - you find the uncertainty in the | .. expression
+#in these simple models, Brms automatically picks the best prior, so we don't have to specify one. 
+brm_out <- brm(MeanES | se(SdES) ~ 1 + (1|StudyRef), 
+               data = df2, iter = 5000, warmup = 2000, cores = 4, chain = 4)
+brm_out
+forest(brm_out,
+       show_data = TRUE,
+       av_name = "Effect size") +
+        geom_vline(aes(xintercept = 0), linetype = 'dashed')
+plot(brm_out)
+```
+
+
+Step 2: Prepare the pitch SD data from last year
+- the data is available as Assignment4PitchData.csv (thanks Celine)
+- We do not know how to build random effects, yet. So we need to simplify the dataset to avoid interdependence between datapoint: How?
+- Also, let's standardize the data, so that they are compatible with our meta-analytic prior (Cohen's d is measured in SDs).
+
+```{r}
+p_sum = dfP %>%
+  group_by(ID_unique) %>%
+  summarise(ID = mean(ID), Diagnosis = mean(diagnosis), Studynr = mean(studynr), PitchMean = mean(PitchMean), PitchSD = mean(PitchSD), PitchMedian = mean(PitchMedian), PitchRange = mean(PitchRange), PitchIQR = mean(PitchIQR), PitchMad = mean(PitchMad), PitchCV = mean(PitchCV)) %>%
+  mutate(MeanScale = scale(PitchMean)[,], SDScale = scale(PitchSD)[,], MedianScale = scale(PitchMedian)[,], RangeScale = scale(PitchRange)[,], IQRScale = scale(PitchIQR)[,], MadScale = scale(PitchMad)[,], CVScale = scale(PitchCV)[,])
+
+```
+
+
+Step 3: Build a regression model predicting Pitch SD from Diagnosis.
+- how is the outcome distributed? (likelihood function)
+- how are the parameters of the likelihood distribution distributed? Which predictors should they be conditioned on?
+- use a skeptical/conservative prior for the effects of diagnosis. Remember you'll need to motivate it.
+- Describe and plot the estimates. Evaluate model quality
+
+
+#Plot function
+```{r}
+gggplot = function(model, x = NULL , y = NULL, dataframe){ 
+   #where: 
+  #model is a model resulting from MAP 
+  #x is the x variable as a string (can be left unspecified) 
+  #y is the y variable as a string (can be left unspecified) 
+  #dataframe is the dataframe from which the model is trained upon 
+  #requires packages: dplyr, ggplot2, stringr and rethinking
+  
+  if (is.null(y) == T){ 
+    #if y isn't specified - extract y 
+    temp <- flist_untag(model@formula)[[1]] 
+    y <- as.character(temp[[2]])
+    } 
+  if (is.null(x) == T){ 
+    #if x isn't specified - extract x 
+      temp <- flist_untag(model@formula)[[2]] 
+      x <- gsub(" ","",gsub(".*\\*","",as.character(temp[[3]])[3])) 
+  }
+  
+   #extracting data from the dataframe 
+  xd <- dplyr::select(dataframe, x) 
+  yd <- dplyr::select(dataframe, y)
+  
+   #calculate the prior data 
+  post <- extract.samples(model) 
+  #posterior from samples 
+  mu.link <- function(x) post$a + post$b*x 
+  VIQ.seq <- seq( from=min(xd) , to=max(xd) , by=0.1 ) 
+  mu <- sapply( VIQ.seq , mu.link ) 
+  mu.mean <- apply( mu , 2 , mean ) 
+  mu.HPDI <- apply( mu , 2 , HPDI , prob=0.89 ) 
+  temp_list = list(VIQ.seq); names(temp_list) <- x 
+  #naming the vector in the list (since the sim function requires it) 
+  sim.VIQ <- sim( model , data=temp_list ) 
+  VIQ.PI <- apply( sim.VIQ , 2 , PI , prob=0.89 )
+
+  #transform the data from ggplot 
+    #for making the line 
+  temp_df <- data.frame(VIQ.seq = VIQ.seq, mu.mean = mu.mean) 
+  #for making the HDPI 
+  temp_matrix <- t(data.frame(mu.HPDI = mu.HPDI)) 
+  #t() is a tranpose function which returns a matrix 
+  temp_df1 = data.frame(lower = temp_matrix[,1], upper = temp_matrix[,2], mu.mean = mu.mean, VIQ.seq = VIQ.seq)
+   #for making the PI 
+  temp_matrix <- t(data.frame(VIQ.PI = VIQ.PI)) 
+  temp_df2 = data.frame(lower = temp_matrix[,1], upper = temp_matrix[,2], mu.mean = mu.mean, VIQ.seq = VIQ.seq) 
+  #for the points 
+  dataframe = data.frame(xd, yd) 
+  #taking the data to new column as to chose the name (maintaining old name for the names on the plot) 
+  dataframe$c1 = dataframe[,1] 
+  dataframe$c2 = dataframe[,2]
+  
+   #make the plot 
+  grob = ggplot(dataframe, aes(x = c1, y = c2)) + 
+    geom_ribbon(data = temp_df2, aes(x = VIQ.seq, y = mu.mean, ymin = lower, ymax = upper), fill = "grey70", alpha = 2/3) + 
+    geom_ribbon(data = temp_df1, aes(x = VIQ.seq, y = mu.mean, ymin = lower, ymax = upper), fill = "grey83", alpha = 2/3) + 
+    geom_line(data = temp_df, aes(x = VIQ.seq, y = mu.mean))+ 
+    geom_point(color = "navyblue", shape = 1, size = 1.5, alpha = 2/3)+ 
+    xlab(colnames(dataframe)[1]) + 
+    ylab(colnames(dataframe)[2]) 
+  #using the names for the axis 
+  return(grob) 
+  } #go go gadget fancy plot
+
+```
+
+
+```{r}
+#p_sum is currently a tibble, needs to converted to a dataframe for rethinking to work
+p_sum=as.data.frame(p_sum)
+
+
+#plotting likelihood
+dens(p_sum$SDScale[p_sum$Diagnosis == "1"], col='red')
+dens(p_sum$SDScale[p_sum$Diagnosis == "0"], add = T)
+
+#p_sum$Diagnosis = as.factor(p_sum$Diagnosis)
+
+
+
+##Run p_sum again so diagnosis goes back to 0's and 1's 
+##Why does map not like diagnosis being a factor?
+
+
+#pretty loose prior
+m1 <- rethinking::map(
+  alist(
+    SDScale ~ dnorm( mu , sigma ) , 
+    mu <- a + b*Diagnosis ,
+    a ~ dnorm( 0 , 1 ) , 
+    b ~ dnorm( 0 , 1 ) , 
+    sigma ~ dunif( 0 , 3 )
+  ) ,
+  data=p_sum )
+
+precis(m1)
+
+#plotting predictions
+b1 = gggplot(m1, x = 'Diagnosis', y = 'SDScale', dataframe = p_sum) +
+  ggtitle("Prior for beta_diagnosis = (0,1)")
+b1
+
+#weakly regularizing prior
+m2 <- rethinking::map(
+  alist(
+    SDScale ~ dnorm( mu , sigma ) , 
+    mu <- a + b*Diagnosis ,
+    a ~ dnorm( 0 , 1 ) , 
+    b ~ dnorm( 0 , 0.5 ) , #weakly regularizing prior 
+    sigma ~ dunif( 0 , 3 )
+  ) ,
+  data=p_sum )
+precis(m2)
+
+#plotting predictions
+b2 = gggplot(m2, x = 'Diagnosis', y = 'SDScale', dataframe = p_sum) +
+  ggtitle("Prior for beta_diagnosis = (0,0.5)")
+b2
+
+#more skeptical prior
+m3 <- rethinking::map(
+  alist(
+    SDScale ~ dnorm( mu , sigma ) , 
+    mu <- a + b*Diagnosis ,
+    a ~ dnorm( 0 , 1 ) , 
+    b ~ dnorm( 0 , 0.25 ) , #conservative prior
+    sigma ~ dunif( 0 , 3 )
+  ) ,
+  data=p_sum )
+precis(m3)
+
+#plotting predictions
+b3 = gggplot(m3, x = 'Diagnosis', y = 'SDScale', dataframe = p_sum) +
+  ggtitle("Prior for beta_diagnosis = (0,0.25)")
+
+#even more conservative prior
+m4 <- rethinking::map(
+  alist(
+    SDScale ~ dnorm( mu , sigma ) , 
+    mu <- a + b*Diagnosis ,
+    a ~ dnorm( 0 , 1 ) , 
+    b ~ dnorm( 0 , 0.1 ) , #conservative prior
+    sigma ~ dunif( 0 , 3 )
+  ) ,
+  data=p_sum )
+precis(m3)
+
+#plotting predictions
+b4 = gggplot(m3, x = 'Diagnosis', y = 'SDScale', dataframe = p_sum) +
+  ggtitle("Prior for beta_diagnosis = (0,0.1)")
+
+#devtools::install_github("thomasp85/patchwork")
+b1 + b2 + b3 + b4
+
+```
+
+#Posterior predictive plots
+```{r}
+#creating a posterior predictive plot
+ # call link without specifying new data
+# so it uses original data
+mu <- link( m1 )
+# summarize samples across cases
+mu.mean <- apply( mu , 2 , mean )
+mu.HPDI <- apply( mu , 2 , HPDI )
+
+#plotting
+plot( mu.mean ~ p_sum$SDScale , col=rangi2 , ylim=range(mu.HPDI) ,
+xlab="Observed SD" , ylab="Predicted SD" )
+abline( a=0 , b=1 , lty=2 )
+for ( i in 1:nrow(p_sum) )
+lines( rep(p_sum$SDScale[i],2) , c(mu.HPDI[1,i],mu.HPDI[2,i]) ,
+col=rangi2 )
+
+
+```
+
+
+Step 4: Now re-run the model with the meta-analytic prior
+- Describe and plot the estimates. Evaluate model quality
+
+```{r}
+mMeta <- rethinking::map(
+  alist(
+    SDScale ~ dnorm( mu , sigma ) , 
+    mu <- a + b*Diagnosis ,
+    a ~ dnorm( 0 , 1 ) , 
+    b ~ dnorm( -0.54 , 0.24 ) , 
+    sigma ~ dunif( 0 , 3 )
+  ) ,
+  data=p_sum )
+
+precis(mMeta)
+
+#Meta analytic priors
+bMeta = gggplot(m3, x = 'Diagnosis', y = 'SDScale', dataframe = p_sum) +
+  ggtitle("Prior for beta_diagnosis = (0,0.1)")
+
+#devtools::install_github("thomasp85/patchwork")
+b1 + b2 + b3 + b4 + bMeta
+
+```
+
+
+Step 5: Compare the models
+- Plot priors and posteriors of the diagnosis effect in both models
+- Compare posteriors between the two models
+- Compare their relative distance from truth (WAIC)
+- Discuss how they compare and whether any of them is best.
+
+```{r}
+#devtools::install_github("rmcelreath/rethinking", force = TRUE)
+
+compare(m1, m2, m3, m4, mMeta)
+coeftab(m1, m2, m3, m4, mMeta)
+
+plot(compare(m1, m2, m3, m4, mMeta))
+plot(coeftab(m1, m2, m3, m4, mMeta))
+
+#plotting betas against each other
+sim1control = sim(m1, data = p_sum[p_sum$Diagnosis == '0',])
+sim1schizo = sim(m1, data = p_sum[p_sum$Diagnosis == '1',])
+
+dens(p_sum$SDScale[p_sum$Diagnosis == "1"], add = F, col = 'green')
+dens(p_sum$SDScale[p_sum$Diagnosis == '0'], add = T, col = 'blue')
+dens(sim1control, add = T)
+dens(sim1schizo, add= T, col = 'red')
+
+```
+
+
+
+Step 6: Prepare a nice write up of the analysis and answer the questions at the top.
+
+Optional step 7: how skeptical should a prior be?
+- Try different levels of skepticism and compare them using WAIC.
+
+Optional step 8: Include other predictors
+- Do age, gender and education improve the model?
+- Should they be main effects or interactions?
+
+Optional step 9: Bromance magic.
+- explore the bromance code below including random effects (by default with weakly informative priors)
+- learn how to change the prior
+- explore effects of trial, age, gender, including the appropriate random slopes
+- compare the models you created using WAIC and posterior predictive check (pp_check())
